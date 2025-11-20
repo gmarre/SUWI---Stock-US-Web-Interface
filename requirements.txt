@@ -1,0 +1,17 @@
+# Requirements pour SUWI - Stock US Web Interface
+
+# Django
+Django>=5.0,<6.0
+
+# Bibliothèques de scraping et données financières
+finvizfinance>=0.14.0
+yfinance>=0.2.0
+
+# Analyse de données
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Bibliothèques supplémentaires (si nécessaire)
+requests>=2.31.0
+lxml>=4.9.0
+beautifulsoup4>=4.12.0
