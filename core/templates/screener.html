@@ -179,6 +179,9 @@
         document.getElementById('screenerForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
+            // Effacer les résultats sauvegardés (nouveau screener)
+            sessionStorage.removeItem('screenerResults');
+            
             // Afficher l'overlay de chargement
             const overlay = document.getElementById('loadingOverlay');
             const progressBar = document.getElementById('progressBar');
@@ -288,6 +291,9 @@
                             // Ajouter les nouveaux résultats
                             document.querySelector('.container').appendChild(resultsSection);
                             
+                            // Sauvegarder dans sessionStorage
+                            sessionStorage.setItem('screenerResults', resultsSection.outerHTML);
+                            
                             // Rendre les lignes du tableau cliquables
                             makeTableRowsClickable();
                             
@@ -364,8 +370,31 @@
             });
         }
 
+        // Restaurer les résultats sauvegardés au chargement de la page
+        function restoreSavedResults() {
+            const savedResults = sessionStorage.getItem('screenerResults');
+            if (savedResults) {
+                // Supprimer le message de bienvenue si présent
+                const welcomeMsg = document.querySelector('#welcomeMessage');
+                if (welcomeMsg) welcomeMsg.remove();
+                
+                // Supprimer les anciens résultats si présents
+                const oldResults = document.querySelectorAll('#resultsSection');
+                oldResults.forEach(result => result.remove());
+                
+                // Ajouter les résultats sauvegardés
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = savedResults;
+                document.querySelector('.container').appendChild(tempDiv.firstElementChild);
+                
+                // Rendre les lignes du tableau cliquables
+                makeTableRowsClickable();
+            }
+        }
+
         // Initialiser
         buildFiltersForm();
+        restoreSavedResults();
     </script>
 </body>
 </html>
