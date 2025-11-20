@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environnement virtuel
+venv/
+env/
+ENV/
+.venv/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
+/mediafiles/
+/media/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Tests
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+
+# Migrations (optionnel - décommentez si vous ne voulez pas versionner les migrations)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# Fichiers système
+Thumbs.db
+.Spotlight-V100
+.Trashes
