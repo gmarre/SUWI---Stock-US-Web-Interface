@@ -206,12 +206,16 @@ def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252):
     return df
 
 
-def run_screener():
+def run_screener(custom_filters=None, rs_rating_min=95):
     """
     Fonction principale : exécute le screener Finviz avec les critères définis
     et calcule le RS Rating pour chaque action
     
-    Critères du screener :
+    Args:
+        custom_filters: Dictionnaire personnalisé de filtres Finviz (optionnel)
+        rs_rating_min: RS Rating minimum pour filtrer les résultats (défaut: 95)
+    
+    Critères du screener par défaut :
     - Pays : USA
     - Market Cap : > 50M$ (Micro cap et plus)
     - Performance mensuelle : +10%
@@ -220,21 +224,25 @@ def run_screener():
     
     Returns:
         DataFrame: DataFrame pandas avec toutes les actions filtrées et leur RS Rating
-                   Filtré pour ne garder que les actions avec RS_Rating > 95
+                   Filtré pour ne garder que les actions avec RS_Rating > rs_rating_min
     """
     print("🔍 Lancement du screener Finviz...")
     
     # Initialiser le screener Finviz
     foverview = Overview()
     
-    # Définir les filtres (critères du notebook)
-    filters_dict = {
-        'Country': 'USA',
-        'Market Cap.': "+Micro (over $50mln)",
-        'Performance': 'Month +10%',
-        'Volatility': 'Month - Over 5%',
-        'Performance 2': 'Quarter Up'
-    }
+    # Utiliser les filtres personnalisés ou les filtres par défaut
+    if custom_filters is None:
+        filters_dict = {
+            'Country': 'USA',
+            'Market Cap.': "+Micro (over $50mln)",
+            'Performance': 'Month +10%',
+            'Volatility': 'Month - Over 5%',
+            'Performance 2': 'Quarter Up'
+        }
+    else:
+        # Créer le dictionnaire pour Finviz (sans RS_Rating_Min)
+        filters_dict = {k: v for k, v in custom_filters.items() if k != 'RS_Rating_Min'}
     
     # Appliquer les filtres
     foverview.set_filter(filters_dict=filters_dict)
@@ -248,9 +256,9 @@ def run_screener():
     # Calculer le RS Rating pour chaque action
     df = add_rs_rating_to_df(df, ticker_column='Ticker')
     
-    # Filtrer pour ne garder que les actions avec RS_Rating > 95
-    df_filtered = df[df['RS_Rating'] > 95]
+    # Filtrer pour ne garder que les actions avec RS_Rating > rs_rating_min
+    df_filtered = df[df['RS_Rating'] > rs_rating_min]
     
-    print(f"\n🎯 {len(df_filtered)} actions avec RS_Rating > 95")
+    print(f"\n🎯 {len(df_filtered)} actions avec RS_Rating > {rs_rating_min}")
     
     return df_filtered

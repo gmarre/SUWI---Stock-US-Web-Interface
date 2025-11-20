@@ -11,4 +11,13 @@ urlpatterns = [
     
     # Screener boursier US
     path('screener/', views.screener_view, name='screener'),
+    
+    # API AJAX pour le screener
+    path('screener/ajax/', views.screener_ajax, name='screener_ajax'),
+    
+    # Visualisation d'une action
+    path('stock/<str:ticker>/', views.stock_detail, name='stock_detail'),
+    
+    # API AJAX pour les données de graphique
+    path('stock/<str:ticker>/data/', views.stock_data_ajax, name='stock_data_ajax'),
 ]

@@ -4,160 +4,368 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Screener US Stocks - SUWI</title>
-    
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px 0;
         }
-        
-        .container {
+        .main-card {
             background: white;
             border-radius: 15px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            padding: 30px;
-            margin-top: 20px;
-        }
-        
-        h1 {
-            color: #667eea;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .subtitle {
-            color: #6c757d;
-            font-size: 1.1rem;
             margin-bottom: 30px;
         }
-        
-        .alert {
-            border-radius: 10px;
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
         }
-        
-        .table-container {
-            overflow-x: auto;
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+        }
+        .progress {
+            height: 30px;
             margin-top: 20px;
         }
-        
-        .table {
-            font-size: 0.9rem;
+        .progress-bar {
+            transition: width 0.3s ease;
         }
-        
-        .table thead {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
         }
-        
-        .table tbody tr:hover {
-            background-color: #f8f9fa;
+        .table tbody tr {
             cursor: pointer;
+            transition: all 0.2s;
         }
-        
-        .badge {
-            font-size: 0.9rem;
-            padding: 8px 15px;
+        .table tbody tr:hover {
+            background-color: #f0f0f0;
+            transform: scale(1.01);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        
-        .criteria {
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 5px;
+        .btn-screen {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
         }
-        
-        .criteria h5 {
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-        
-        .criteria ul {
-            margin-bottom: 0;
-        }
-        
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        
-        .back-link:hover {
-            color: #764ba2;
+        .btn-screen:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Lien retour -->
-        <a href="/" class="back-link">← Retour à l'accueil</a>
-        
-        <!-- En-tête -->
-        <h1>🔍 Screener US Stocks</h1>
-        <p class="subtitle">Filtrage automatique avec calcul du RS Rating (Relative Strength)</p>
-        
-        <!-- Critères du screener -->
-        <div class="criteria">
-            <h5>📋 Critères de filtrage :</h5>
-            <ul>
-                <li><strong>Pays :</strong> USA</li>
-                <li><strong>Capitalisation :</strong> > 50M$ (Micro cap et plus)</li>
-                <li><strong>Performance mensuelle :</strong> > +10%</li>
-                <li><strong>Volatilité mensuelle :</strong> > 5%</li>
-                <li><strong>Performance trimestrielle :</strong> Positive</li>
-                <li><strong>RS Rating :</strong> > 95 (force relative vs SPX)</li>
-            </ul>
+        <!-- Titre -->
+        <div class="text-center text-white mb-4">
+            <h1 class="display-4">🔍 Screener US Stocks</h1>
+            <p class="lead">Filtrage automatique avec calcul du RS Rating</p>
+            <a href="{% url 'home' %}" class="btn btn-outline-light btn-sm">← Retour à l'accueil</a>
+        </div>
+
+        <!-- Formulaire de filtres -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h3 class="mb-4"><i class="bi bi-sliders"></i> Configuration du Screener</h3>
+                
+                <form id="screenerForm">
+                    {% csrf_token %}
+                    <div class="row" id="filtersContainer"></div>
+
+                    <hr class="my-4">
+                    
+                    <div class="text-center">
+                        <button type="button" class="btn btn-secondary btn-lg me-2" onclick="resetFilters()">
+                            <i class="bi bi-arrow-clockwise"></i> Réinitialiser
+                        </button>
+                        <button type="submit" class="btn btn-primary btn-lg btn-screen">
+                            <i class="bi bi-search"></i> Nouveau Screen
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Message de bienvenue initial -->
+        <div class="main-card" id="welcomeMessage">
+            <div class="card-body p-5 text-center">
+                <i class="bi bi-arrow-up-circle" style="font-size: 4rem; color: #667eea;"></i>
+                <h4 class="mt-3">Configurez vos paramètres ci-dessus</h4>
+                <p class="text-muted">Sélectionnez vos critères de filtrage et cliquez sur "Nouveau Screen" pour lancer l'analyse.</p>
+            </div>
         </div>
         
-        {% if success %}
-            <!-- Résultats trouvés -->
-            {% if count > 0 %}
-                <div class="alert alert-success d-flex align-items-center" role="alert">
-                    <span class="me-2">✅</span>
-                    <div>
-                        <strong>{{ count }}</strong> action{% if count > 1 %}s{% endif %} 
-                        trouvée{% if count > 1 %}s{% endif %} répondant aux critères !
-                    </div>
-                </div>
-                
-                <!-- Tableau des résultats -->
-                <div class="table-container">
-                    {{ table_html|safe }}
-                </div>
-                
-            {% else %}
-                <!-- Aucun résultat -->
-                <div class="alert alert-warning" role="alert">
-                    <strong>⚠️ Aucune action trouvée</strong><br>
-                    Aucune action ne correspond aux critères du screener pour le moment.
-                </div>
-            {% endif %}
+        <!-- Les résultats seront insérés ici dynamiquement par JavaScript -->
+    </div>
+
+    <!-- Overlay de chargement -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <h3><i class="bi bi-hourglass-split"></i> Analyse en cours...</h3>
+            <p class="text-muted">Récupération et analyse des données boursières</p>
             
-        {% else %}
-            <!-- Erreur -->
-            <div class="alert alert-danger" role="alert">
-                <strong>❌ Erreur lors de l'exécution du screener</strong><br>
-                {{ error_message }}
+            <div class="progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                     role="progressbar" 
+                     style="width: 0%" 
+                     id="progressBar">0%</div>
             </div>
-        {% endif %}
-        
-        <!-- Légende -->
-        <div class="mt-4 p-3" style="background: #f8f9fa; border-radius: 5px;">
-            <small class="text-muted">
-                <strong>📊 À propos du RS Rating :</strong><br>
-                Le RS Rating (1-99) mesure la force relative d'une action par rapport au S&P 500 sur les 252 derniers jours.
-                Un RS > 95 indique que l'action surperforme 95% du marché.
-            </small>
+            
+            <p class="mt-3 text-muted" id="loadingStatus">Initialisation...</p>
+            <small class="text-muted">Cette opération peut prendre 1 à 2 minutes</small>
         </div>
     </div>
-    
-    <!-- Bootstrap 5 JS -->
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Configuration depuis le backend
+        const config = {{ config|safe }};
+        const currentFilters = {{ current_filters|safe }};
+        const rsRatingMin = {{ rs_rating_min|default:0 }};
+
+        // Générer les champs de filtres dynamiquement
+        function buildFiltersForm() {
+            const container = document.getElementById('filtersContainer');
+            
+            config.display_order.forEach(paramKey => {
+                const param = config.filters[paramKey];
+                const currentValue = currentFilters[paramKey] || param.default;
+                
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4 mb-3';
+                
+                col.innerHTML = `
+                    <label class="form-label fw-bold">${param.label}</label>
+                    <select name="${paramKey}" class="form-select" id="filter_${paramKey}">
+                        ${param.options.map(opt => `
+                            <option value="${opt.value}" ${opt.value === currentValue ? 'selected' : ''}>
+                                ${opt.label}
+                            </option>
+                        `).join('')}
+                    </select>
+                `;
+                
+                container.appendChild(col);
+            });
+        }
+
+
+
+        // Réinitialiser les filtres aux valeurs par défaut
+        function resetFilters() {
+            config.display_order.forEach(paramKey => {
+                const param = config.filters[paramKey];
+                document.getElementById('filter_' + paramKey).value = param.default;
+            });
+        }
+
+        // Gestion du formulaire
+        document.getElementById('screenerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Afficher l'overlay de chargement
+            const overlay = document.getElementById('loadingOverlay');
+            const progressBar = document.getElementById('progressBar');
+            const statusText = document.getElementById('loadingStatus');
+            
+            overlay.style.display = 'flex';
+            
+            // Simuler la progression avec timing plus réaliste
+            let progress = 0;
+            const statuses = [
+                {text: 'Connexion à Finviz...', duration: 2000, target: 10},
+                {text: 'Application des filtres...', duration: 1000, target: 15},
+                {text: 'Récupération des données Finviz...', duration: 3000, target: 25},
+                {text: 'Téléchargement des prix historiques SPX...', duration: 4000, target: 35},
+                {text: 'Calcul du RS Rating pour chaque ticker...', duration: 25000, target: 90},
+                {text: 'Finalisation...', duration: 2000, target: 95}
+            ];
+            
+            let currentStatusIndex = 0;
+            let statusStartTime = Date.now();
+            
+            const progressInterval = setInterval(() => {
+                const elapsed = Date.now() - statusStartTime;
+                const currentStatus = statuses[currentStatusIndex];
+                
+                // Progression linéaire vers la cible du statut actuel
+                const statusProgress = Math.min(elapsed / currentStatus.duration, 1);
+                const targetProgress = currentStatus.target;
+                const previousTarget = currentStatusIndex > 0 ? statuses[currentStatusIndex - 1].target : 0;
+                
+                progress = previousTarget + (targetProgress - previousTarget) * statusProgress;
+                
+                progressBar.style.width = progress + '%';
+                progressBar.textContent = Math.round(progress) + '%';
+                statusText.textContent = currentStatus.text;
+                
+                // Passer au statut suivant si terminé
+                if (statusProgress >= 1 && currentStatusIndex < statuses.length - 1) {
+                    currentStatusIndex++;
+                    statusStartTime = Date.now();
+                }
+            }, 200);
+
+            // Récupérer les filtres (sans le CSRF token)
+            const formData = new FormData(this);
+            const filters = {};
+            for (let [key, value] of formData.entries()) {
+                // Ignorer le CSRF token
+                if (key !== 'csrfmiddlewaretoken' && value) {
+                    filters[key] = value;
+                }
+            }
+
+            // Envoyer la requête AJAX
+            fetch('{% url "screener_ajax" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(filters)
+            })
+            .then(response => response.json())
+            .then(data => {
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
+                statusText.textContent = 'Terminé !';
+                
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                    
+                    if (data.success) {
+                        // Supprimer TOUS les anciens résultats avant d'afficher les nouveaux
+                        const oldResults = document.querySelectorAll('#resultsSection');
+                        oldResults.forEach(result => result.remove());
+                        
+                        // Supprimer le message de bienvenue
+                        const welcomeMsg = document.querySelector('#welcomeMessage');
+                        if (welcomeMsg) welcomeMsg.remove();
+                        
+                        // Supprimer aussi les messages d'erreur/warning précédents
+                        const oldMessages = document.querySelectorAll('.alert-warning, .alert-danger');
+                        oldMessages.forEach(msg => msg.remove());
+                        
+                        if (data.count > 0) {
+                            // Créer le HTML de résultats
+                            const resultsSection = document.createElement('div');
+                            resultsSection.className = 'main-card';
+                            resultsSection.id = 'resultsSection';
+                            resultsSection.innerHTML = `
+                                <div class="card-body p-4">
+                                    <h4 class="mb-3">
+                                        <i class="bi bi-check-circle text-success"></i> 
+                                        ${data.count} action${data.count > 1 ? 's' : ''} trouvée${data.count > 1 ? 's' : ''}
+                                    </h4>
+                                    <div class="table-responsive">${data.html}</div>
+                                    <hr class="my-4">
+                                    <div class="alert alert-info">
+                                        <strong><i class="bi bi-info-circle"></i> RS Rating :</strong> 
+                                        Mesure la force relative de l'action par rapport au S&P 500 sur différentes périodes (63, 126, 189 et 252 jours).
+                                        Un RS Rating > 95 indique que l'action performe mieux que 95% du marché.
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // Ajouter les nouveaux résultats
+                            document.querySelector('.container').appendChild(resultsSection);
+                            
+                            // Rendre les lignes du tableau cliquables
+                            makeTableRowsClickable();
+                            
+                            // Scroller vers les résultats
+                            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        } else {
+                            // Afficher un message si aucun résultat
+                            const noResultDiv = document.createElement('div');
+                            noResultDiv.id = 'resultsSection';
+                            noResultDiv.className = 'alert alert-warning alert-dismissible fade show';
+                            noResultDiv.innerHTML = `
+                                <i class="bi bi-info-circle"></i> ${data.message || 'Aucune action ne correspond aux critères.'}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            `;
+                            document.querySelector('.container').appendChild(noResultDiv);
+                        }
+                    } else {
+                        alert('Erreur: ' + data.error);
+                    }
+                }, 500);
+            })
+            .catch(error => {
+                clearInterval(progressInterval);
+                overlay.style.display = 'none';
+                alert('Erreur lors de la connexion au serveur: ' + error);
+            });
+        });
+
+        // Fonction pour récupérer le CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Récupérer le CSRF token du formulaire ou des cookies
+        function getCSRFToken() {
+            // D'abord essayer de récupérer depuis le formulaire
+            const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (tokenInput) {
+                return tokenInput.value;
+            }
+            // Sinon depuis les cookies
+            return getCookie('csrftoken');
+        }
+
+        // Rendre les lignes du tableau cliquables
+        function makeTableRowsClickable() {
+            const table = document.querySelector('#resultsSection table');
+            if (!table) return;
+            
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                row.addEventListener('click', function() {
+                    // Récupérer le ticker (première cellule)
+                    const ticker = this.cells[0].textContent.trim();
+                    
+                    // Rediriger vers la page de détail
+                    window.location.href = `/stock/${ticker}/`;
+                });
+                
+                // Ajouter un effet visuel au survol
+                row.style.cursor = 'pointer';
+                row.title = 'Cliquez pour voir l\'analyse technique détaillée';
+            });
+        }
+
+        // Initialiser
+        buildFiltersForm();
+    </script>
 </body>
 </html>

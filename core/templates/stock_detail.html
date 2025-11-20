@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ ticker }} - Analyse Technique</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        .indicator-btn {
+            margin: 5px;
+            transition: all 0.3s;
+        }
+        .indicator-btn.active {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .info-badge {
+            font-size: 0.9rem;
+            padding: 8px 12px;
+            margin: 5px;
+        }
+        #chartContainer {
+            min-height: 600px;
+        }
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- En-tête avec bouton retour -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <a href="{{ back_url }}" class="btn btn-outline-light btn-lg">
+                    <i class="bi bi-arrow-left"></i> Retour au Screener
+                </a>
+            </div>
+        </div>
+
+        <!-- Titre et informations -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h1 class="mb-2">
+                            <i class="bi bi-graph-up text-primary"></i> {{ ticker }}
+                            <span class="text-muted" id="stockName"></span>
+                        </h1>
+                        <p class="text-muted mb-0" id="stockSector"></p>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <div id="stockBadges"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Indicateurs techniques -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h4 class="mb-3"><i class="bi bi-sliders"></i> Indicateurs Techniques</h4>
+                <div class="d-flex flex-wrap">
+                    <button class="btn btn-outline-primary indicator-btn" data-indicator="sma20">
+                        <i class="bi bi-graph-up"></i> SMA 20
+                    </button>
+                    <button class="btn btn-outline-primary indicator-btn" data-indicator="sma50">
+                        <i class="bi bi-graph-up"></i> SMA 50
+                    </button>
+                    <button class="btn btn-outline-primary indicator-btn" data-indicator="sma200">
+                        <i class="bi bi-graph-up"></i> SMA 200
+                    </button>
+                    <button class="btn btn-outline-success indicator-btn" data-indicator="ema20">
+                        <i class="bi bi-lightning"></i> EMA 20
+                    </button>
+                    <button class="btn btn-outline-info indicator-btn" data-indicator="bbands">
+                        <i class="bi bi-arrows-expand"></i> Bollinger Bands
+                    </button>
+                    <button class="btn btn-outline-warning indicator-btn" data-indicator="rsi">
+                        <i class="bi bi-speedometer2"></i> RSI (14)
+                    </button>
+                    <button class="btn btn-outline-danger indicator-btn" data-indicator="macd">
+                        <i class="bi bi-bar-chart"></i> MACD
+                    </button>
+                    <button class="btn btn-outline-secondary indicator-btn active" data-indicator="volume">
+                        <i class="bi bi-bar-chart-fill"></i> Volume
+                    </button>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> Cliquez sur les indicateurs pour les ajouter/retirer du graphique
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <div id="chartContainer">
+                    <div class="loading-spinner">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                            <p class="mt-3 text-muted">Chargement des données...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistiques détaillées -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h4 class="mb-3"><i class="bi bi-clipboard-data"></i> Statistiques</h4>
+                <div class="row" id="statsContainer">
+                    <!-- Sera rempli par JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const ticker = '{{ ticker }}';
+        let currentData = null;
+        let activeIndicators = new Set(['volume']);
+
+        // Charger les données initiales
+        async function loadStockData() {
+            try {
+                const indicators = Array.from(activeIndicators).join(',');
+                const response = await fetch(`/stock/${ticker}/data/?indicators=${indicators}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error);
+                }
+
+                currentData = data;
+                updateStockInfo(data.info);
+                updateStats(data.info);
+                drawChart(data);
+
+            } catch (error) {
+                document.getElementById('chartContainer').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        Erreur lors du chargement des données: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Mettre à jour les informations de l'action
+        function updateStockInfo(info) {
+            document.getElementById('stockName').textContent = info.name;
+            document.getElementById('stockSector').textContent = `${info.sector} • ${info.industry}`;
+
+            const badges = document.getElementById('stockBadges');
+            badges.innerHTML = `
+                <span class="badge bg-primary info-badge">P/E: ${typeof info.pe_ratio === 'number' ? info.pe_ratio.toFixed(2) : info.pe_ratio}</span>
+                <span class="badge bg-success info-badge">Beta: ${typeof info.beta === 'number' ? info.beta.toFixed(2) : info.beta}</span>
+                <span class="badge bg-info info-badge">Cap: ${formatMarketCap(info.market_cap)}</span>
+            `;
+        }
+
+        // Mettre à jour les statistiques
+        function updateStats(info) {
+            const stats = [
+                {label: 'Capitalisation', value: formatMarketCap(info.market_cap)},
+                {label: 'P/E Ratio', value: typeof info.pe_ratio === 'number' ? info.pe_ratio.toFixed(2) : info.pe_ratio},
+                {label: 'Dividend Yield', value: info.dividend_yield ? (info.dividend_yield * 100).toFixed(2) + '%' : 'N/A'},
+                {label: 'Beta', value: typeof info.beta === 'number' ? info.beta.toFixed(2) : info.beta},
+                {label: 'Max 52 sem', value: info['52w_high'] ? '$' + info['52w_high'].toFixed(2) : 'N/A'},
+                {label: 'Min 52 sem', value: info['52w_low'] ? '$' + info['52w_low'].toFixed(2) : 'N/A'},
+                {label: 'Volume moyen', value: formatVolume(info.avg_volume)}
+            ];
+
+            const container = document.getElementById('statsContainer');
+            container.innerHTML = stats.map(stat => `
+                <div class="col-md-3 mb-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted mb-1">${stat.label}</h6>
+                            <h4 class="mb-0">${stat.value}</h4>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Dessiner le graphique avec Plotly
+        function drawChart(data) {
+            const ohlcv = data.ohlcv;
+            const indicators = data.indicators;
+
+            // Trace principale : Chandelier japonais
+            const candlestick = {
+                x: ohlcv.dates,
+                open: ohlcv.open,
+                high: ohlcv.high,
+                low: ohlcv.low,
+                close: ohlcv.close,
+                type: 'candlestick',
+                name: ticker,
+                increasing: {line: {color: '#26a69a'}},
+                decreasing: {line: {color: '#ef5350'}},
+                xaxis: 'x',
+                yaxis: 'y'
+            };
+
+            const traces = [candlestick];
+
+            // Ajouter les indicateurs
+            if (activeIndicators.has('sma20') && indicators.sma20) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.sma20.length),
+                    y: indicators.sma20,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'SMA 20',
+                    line: {color: '#2196F3', width: 2},
+                    yaxis: 'y'
+                });
+            }
+
+            if (activeIndicators.has('sma50') && indicators.sma50) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.sma50.length),
+                    y: indicators.sma50,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'SMA 50',
+                    line: {color: '#FF9800', width: 2},
+                    yaxis: 'y'
+                });
+            }
+
+            if (activeIndicators.has('sma200') && indicators.sma200) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.sma200.length),
+                    y: indicators.sma200,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'SMA 200',
+                    line: {color: '#9C27B0', width: 2},
+                    yaxis: 'y'
+                });
+            }
+
+            if (activeIndicators.has('ema20') && indicators.ema20) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.ema20.length),
+                    y: indicators.ema20,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'EMA 20',
+                    line: {color: '#4CAF50', width: 2, dash: 'dot'},
+                    yaxis: 'y'
+                });
+            }
+
+            if (activeIndicators.has('bbands') && indicators.bb_upper) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.bb_upper.length),
+                    y: indicators.bb_upper,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'BB Upper',
+                    line: {color: '#00BCD4', width: 1},
+                    yaxis: 'y'
+                });
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.bb_lower.length),
+                    y: indicators.bb_lower,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'BB Lower',
+                    line: {color: '#00BCD4', width: 1},
+                    fill: 'tonexty',
+                    fillcolor: 'rgba(0, 188, 212, 0.1)',
+                    yaxis: 'y'
+                });
+            }
+
+            // Volume
+            if (activeIndicators.has('volume')) {
+                traces.push({
+                    x: ohlcv.dates,
+                    y: ohlcv.volume,
+                    type: 'bar',
+                    name: 'Volume',
+                    marker: {
+                        color: ohlcv.close.map((c, i) => i > 0 && c >= ohlcv.close[i-1] ? '#26a69a' : '#ef5350')
+                    },
+                    yaxis: 'y2'
+                });
+            }
+
+            // RSI
+            if (activeIndicators.has('rsi') && indicators.rsi) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.rsi.length),
+                    y: indicators.rsi,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'RSI',
+                    line: {color: '#FFC107', width: 2},
+                    yaxis: 'y3'
+                });
+                // Lignes de référence RSI
+                traces.push({
+                    x: [ohlcv.dates[0], ohlcv.dates[ohlcv.dates.length-1]],
+                    y: [70, 70],
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'RSI 70',
+                    line: {color: 'red', width: 1, dash: 'dash'},
+                    showlegend: false,
+                    yaxis: 'y3'
+                });
+                traces.push({
+                    x: [ohlcv.dates[0], ohlcv.dates[ohlcv.dates.length-1]],
+                    y: [30, 30],
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'RSI 30',
+                    line: {color: 'green', width: 1, dash: 'dash'},
+                    showlegend: false,
+                    yaxis: 'y3'
+                });
+            }
+
+            // MACD
+            if (activeIndicators.has('macd') && indicators.macd) {
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.macd.length),
+                    y: indicators.macd,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'MACD',
+                    line: {color: '#2196F3', width: 2},
+                    yaxis: 'y4'
+                });
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.macd_signal.length),
+                    y: indicators.macd_signal,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Signal',
+                    line: {color: '#FF5722', width: 2},
+                    yaxis: 'y4'
+                });
+                traces.push({
+                    x: ohlcv.dates.slice(-indicators.macd_hist.length),
+                    y: indicators.macd_hist,
+                    type: 'bar',
+                    name: 'Histogram',
+                    marker: {color: '#9E9E9E'},
+                    yaxis: 'y4'
+                });
+            }
+
+            // Configuration du layout
+            const layout = {
+                title: `${ticker} - Analyse sur 1 an`,
+                xaxis: {
+                    rangeslider: {visible: false},
+                    type: 'date'
+                },
+                yaxis: {
+                    title: 'Prix ($)',
+                    domain: activeIndicators.has('volume') ? 
+                        (activeIndicators.has('rsi') || activeIndicators.has('macd') ? [0.4, 1] : [0.2, 1]) : 
+                        [0, 1]
+                },
+                yaxis2: {
+                    title: 'Volume',
+                    domain: [0, activeIndicators.has('rsi') || activeIndicators.has('macd') ? 0.15 : 0.18],
+                    visible: activeIndicators.has('volume')
+                },
+                yaxis3: {
+                    title: 'RSI',
+                    domain: [0.2, 0.35],
+                    visible: activeIndicators.has('rsi')
+                },
+                yaxis4: {
+                    title: 'MACD',
+                    domain: [0.2, 0.35],
+                    visible: activeIndicators.has('macd')
+                },
+                height: 800,
+                showlegend: true,
+                legend: {x: 0, y: 1}
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false
+            };
+
+            // Vider le container avant de dessiner (supprime le spinner)
+            document.getElementById('chartContainer').innerHTML = '';
+            
+            Plotly.newPlot('chartContainer', traces, layout, config);
+        }
+
+        // Gestion des boutons d'indicateurs
+        document.querySelectorAll('.indicator-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const indicator = this.dataset.indicator;
+                
+                if (activeIndicators.has(indicator)) {
+                    activeIndicators.delete(indicator);
+                    this.classList.remove('active');
+                } else {
+                    activeIndicators.add(indicator);
+                    this.classList.add('active');
+                }
+
+                // Recharger le graphique avec les nouveaux indicateurs
+                loadStockData();
+            });
+        });
+
+        // Fonctions utilitaires
+        function formatMarketCap(value) {
+            if (!value) return 'N/A';
+            if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T$';
+            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'Mds$';
+            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M$';
+            return value.toFixed(0) + '$';
+        }
+
+        function formatVolume(value) {
+            if (!value) return 'N/A';
+            if (value >= 1e9) return (value / 1e9).toFixed(2) + 'Mds';
+            if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M';
+            if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K';
+            return value.toFixed(0);
+        }
+
+        // Charger les données au démarrage
+        loadStockData();
+    </script>
+</body>
+</html>

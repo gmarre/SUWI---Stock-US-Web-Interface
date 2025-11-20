@@ -1,9 +1,19 @@
 """
 Vues de l'application core.
 """
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
 from .screener import run_screener
+import json
+import os
+
+
+def load_screener_config():
+    """Charge la configuration du screener depuis le fichier JSON"""
+    config_path = os.path.join(os.path.dirname(__file__), 'screener_config.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def home(request):
@@ -57,50 +67,217 @@ def home(request):
     return HttpResponse(html_content)
 
 
+@ensure_csrf_cookie
 def screener_view(request):
     """
-    Vue pour le screener boursier US.
+    Vue pour le screener boursier US avec filtres configurables.
     
-    Exécute le screener Finviz avec calcul du RS Rating et affiche
-    les résultats dans un tableau HTML.
-    
-    Le screener filtre les actions US selon les critères :
-    - Market Cap > 50M$
-    - Performance mensuelle > +10%
-    - Volatilité mensuelle > 5%
-    - Performance trimestrielle positive
-    - RS Rating > 95 (force relative vs SPX)
+    Affiche le formulaire de filtres et exécute le screener si demandé.
     
     Returns:
-        HttpResponse: Page HTML avec le tableau des résultats
+        HttpResponse: Page HTML avec le formulaire et les résultats
     """
-    try:
-        # Exécuter le screener (code du notebook)
-        df = run_screener()
-        
-        # Convertir le DataFrame en HTML avec style Bootstrap
-        table_html = df.to_html(
-            classes='table table-striped table-hover',
-            index=False,
-            border=0,
-            escape=False,
-            float_format=lambda x: f'{x:.2f}' if isinstance(x, float) else x
-        )
-        
-        # Préparer le contexte pour le template
-        context = {
-            'table_html': table_html,
-            'count': len(df),
-            'success': True
-        }
-        
-    except Exception as e:
-        # En cas d'erreur, afficher un message
-        context = {
-            'table_html': None,
-            'count': 0,
-            'success': False,
-            'error_message': str(e)
-        }
+    # Charger la configuration des filtres
+    config = load_screener_config()
+    
+    # Récupérer les filtres depuis la requête GET
+    filters = {}
+    for param in config['display_order']:
+        value = request.GET.get(param, '')
+        if value:
+            filters[param] = value
+    
+    # Extraire RS_Rating_Min si présent
+    rs_rating_min = int(filters.pop('RS_Rating_Min', 0))
+    
+    # Préparer le contexte - Ne jamais exécuter le screener au chargement de la page
+    # Le screener est uniquement exécuté via AJAX quand on clique sur le bouton
+    context = {
+        'config': json.dumps(config),  # Sérialiser en JSON pour JavaScript
+        'current_filters': json.dumps(filters),
+        'rs_rating_min': rs_rating_min,
+        'is_screening': False  # Toujours False - pas d'exécution automatique
+    }
     
     return render(request, 'screener.html', context)
+
+
+def screener_ajax(request):
+    """
+    Vue AJAX pour exécuter le screener et retourner les résultats en JSON.
+    Utilisé pour afficher la progression en temps réel.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        # Récupérer les filtres depuis POST
+        filters = json.loads(request.body)
+        rs_rating_min = int(filters.pop('RS_Rating_Min', 95))
+        
+        # Exécuter le screener
+        df = run_screener(custom_filters=filters, rs_rating_min=rs_rating_min)
+        
+        # Convertir en HTML
+        if not df.empty:
+            table_html = df.to_html(
+                classes='table table-striped table-hover',
+                index=False,
+                border=0,
+                escape=False,
+                float_format=lambda x: f'{x:.2f}' if isinstance(x, float) else x
+            )
+            return JsonResponse({
+                'success': True,
+                'html': table_html,
+                'count': len(df)
+            })
+        else:
+            return JsonResponse({
+                'success': True,
+                'html': '',
+                'count': 0,
+                'message': 'Aucune action ne correspond aux critères.'
+            })
+            
+    except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+
+
+def stock_detail(request, ticker):
+    """
+    Vue pour afficher le détail d'une action avec graphique en chandeliers.
+    
+    Args:
+        ticker: Symbole boursier (ex: AAPL, TSLA)
+    """
+    context = {
+        'ticker': ticker.upper(),
+        'back_url': request.META.get('HTTP_REFERER', '/screener/')  # URL de retour
+    }
+    
+    return render(request, 'stock_detail.html', context)
+
+
+def stock_data_ajax(request, ticker):
+    """
+    API AJAX pour récupérer les données d'une action et calculer les indicateurs techniques.
+    
+    Args:
+        ticker: Symbole boursier
+        
+    Query params:
+        indicators: Liste des indicateurs à calculer (sma20,sma50,ema20,bbands,rsi,macd,volume)
+    """
+    try:
+        import yfinance as yf
+        import pandas as pd
+        from datetime import datetime, timedelta
+        
+        # Récupérer les indicateurs demandés
+        indicators = request.GET.get('indicators', '').split(',')
+        indicators = [ind.strip() for ind in indicators if ind.strip()]
+        
+        # Télécharger les données (1 an + marge pour SMA)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=400)
+        
+        stock = yf.Ticker(ticker)
+        df = stock.history(start=start_date, end=end_date)
+        
+        if df.empty:
+            return JsonResponse({
+                'success': False,
+                'error': f'Aucune donnée trouvée pour {ticker}'
+            })
+        
+        # Calculer les indicateurs demandés
+        indicators_data = {}
+        
+        if 'sma20' in indicators:
+            df['SMA_20'] = df['Close'].rolling(window=20).mean()
+            indicators_data['sma20'] = df['SMA_20'].dropna().tolist()
+        
+        if 'sma50' in indicators:
+            df['SMA_50'] = df['Close'].rolling(window=50).mean()
+            indicators_data['sma50'] = df['SMA_50'].dropna().tolist()
+        
+        if 'sma200' in indicators:
+            df['SMA_200'] = df['Close'].rolling(window=200).mean()
+            indicators_data['sma200'] = df['SMA_200'].dropna().tolist()
+        
+        if 'ema20' in indicators:
+            df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+            indicators_data['ema20'] = df['EMA_20'].dropna().tolist()
+        
+        if 'bbands' in indicators:
+            sma20 = df['Close'].rolling(window=20).mean()
+            std20 = df['Close'].rolling(window=20).std()
+            df['BB_Upper'] = sma20 + (std20 * 2)
+            df['BB_Lower'] = sma20 - (std20 * 2)
+            indicators_data['bb_upper'] = df['BB_Upper'].dropna().tolist()
+            indicators_data['bb_lower'] = df['BB_Lower'].dropna().tolist()
+        
+        if 'rsi' in indicators:
+            delta = df['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            df['RSI'] = 100 - (100 / (1 + rs))
+            indicators_data['rsi'] = df['RSI'].dropna().tolist()
+        
+        if 'macd' in indicators:
+            ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+            ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+            df['MACD'] = ema12 - ema26
+            df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+            df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
+            indicators_data['macd'] = df['MACD'].dropna().tolist()
+            indicators_data['macd_signal'] = df['MACD_Signal'].dropna().tolist()
+            indicators_data['macd_hist'] = df['MACD_Hist'].dropna().tolist()
+        
+        # Garder seulement les 252 derniers jours (1 an de bourse)
+        df = df.tail(252)
+        
+        # Préparer les données OHLCV
+        dates = df.index.strftime('%Y-%m-%d').tolist()
+        ohlcv = {
+            'dates': dates,
+            'open': df['Open'].tolist(),
+            'high': df['High'].tolist(),
+            'low': df['Low'].tolist(),
+            'close': df['Close'].tolist(),
+            'volume': df['Volume'].tolist()
+        }
+        
+        # Informations de l'action
+        info = stock.info
+        stock_info = {
+            'name': info.get('longName', ticker),
+            'sector': info.get('sector', 'N/A'),
+            'industry': info.get('industry', 'N/A'),
+            'market_cap': info.get('marketCap', 0),
+            'pe_ratio': info.get('trailingPE', 'N/A'),
+            'dividend_yield': info.get('dividendYield', 0),
+            'beta': info.get('beta', 'N/A'),
+            '52w_high': info.get('fiftyTwoWeekHigh', 0),
+            '52w_low': info.get('fiftyTwoWeekLow', 0),
+            'avg_volume': info.get('averageVolume', 0)
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'ticker': ticker.upper(),
+            'ohlcv': ohlcv,
+            'indicators': indicators_data,
+            'info': stock_info
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
