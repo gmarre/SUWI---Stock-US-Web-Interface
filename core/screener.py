@@ -251,6 +251,11 @@ def run_screener(custom_filters=None, rs_rating_min=95):
     print("📊 Récupération des données Finviz...")
     df = foverview.screener_view()
     
+    # Vérifier si le DataFrame est vide ou None
+    if df is None or len(df) == 0:
+        print("⚠️ Aucune action trouvée avec ces critères Finviz")
+        return pd.DataFrame()  # Retourner un DataFrame vide
+    
     print(f"✅ {len(df)} actions trouvées avant filtrage RS\n")
     
     # Calculer le RS Rating pour chaque action

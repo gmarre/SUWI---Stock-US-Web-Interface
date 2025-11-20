@@ -68,7 +68,6 @@
       "default": "+Micro (over $50mln)",
       "options": [
         {"value": "", "label": "Toutes"},
-        {"value": "+Mega (over $200bln)", "label": "+Mega (> 200Mds$)"},
         {"value": "+Large (over $10bln)", "label": "+Large (> 10Mds$)"},
         {"value": "+Mid (over $2bln)", "label": "+Mid (> 2Mds$)"},
         {"value": "+Small (over $300mln)", "label": "+Small (> 300M$)"},
@@ -174,19 +173,26 @@
       "options": [
         {"value": "", "label": "Toutes"},
         {"value": "Week - Over 15%", "label": "Semaine > 15%"},
+        {"value": "Week - Over 12%", "label": "Semaine > 12%"},
         {"value": "Week - Over 10%", "label": "Semaine > 10%"},
+        {"value": "Week - Over 9%", "label": "Semaine > 9%"},
+        {"value": "Week - Over 8%", "label": "Semaine > 8%"},
+        {"value": "Week - Over 7%", "label": "Semaine > 7%"},
+        {"value": "Week - Over 6%", "label": "Semaine > 6%"},
         {"value": "Week - Over 5%", "label": "Semaine > 5%"},
         {"value": "Week - Over 4%", "label": "Semaine > 4%"},
         {"value": "Week - Over 3%", "label": "Semaine > 3%"},
-        {"value": "Week - Over 2%", "label": "Semaine > 2%"},
-        {"value": "Week - Over 1%", "label": "Semaine > 1%"},
         {"value": "Month - Over 15%", "label": "Mois > 15%"},
+        {"value": "Month - Over 12%", "label": "Mois > 12%"},
         {"value": "Month - Over 10%", "label": "Mois > 10%"},
+        {"value": "Month - Over 9%", "label": "Mois > 9%"},
+        {"value": "Month - Over 8%", "label": "Mois > 8%"},
+        {"value": "Month - Over 7%", "label": "Mois > 7%"},
+        {"value": "Month - Over 6%", "label": "Mois > 6%"},
         {"value": "Month - Over 5%", "label": "Mois > 5%"},
         {"value": "Month - Over 4%", "label": "Mois > 4%"},
         {"value": "Month - Over 3%", "label": "Mois > 3%"},
-        {"value": "Month - Over 2%", "label": "Mois > 2%"},
-        {"value": "Month - Over 1%", "label": "Mois > 1%"}
+        {"value": "Month - Over 2%", "label": "Mois > 2%"}
       ]
     },
     "Performance 2": {
