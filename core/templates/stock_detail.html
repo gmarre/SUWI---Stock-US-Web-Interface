@@ -45,12 +45,25 @@
 </head>
 <body>
     <div class="container-fluid">
-        <!-- En-tête avec bouton retour -->
+        <!-- Navigation -->
         <div class="row mb-3">
-            <div class="col-12">
-                <a href="{{ back_url }}" class="btn btn-outline-light btn-lg">
-                    <i class="bi bi-arrow-left"></i> Retour au Screener
-                </a>
+            <div class="col-md-6">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <button class="btn btn-success btn-lg" onclick="showWatchlistModal()">
+                    <i class="bi bi-plus-circle"></i> Ajouter à Watchlist
+                </button>
             </div>
         </div>
 
@@ -461,6 +474,162 @@
 
         // Charger les données au démarrage
         loadStockData();
+    </script>
+
+    <!-- Modal pour ajouter à watchlist -->
+    <div class="modal fade" id="watchlistModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-star-fill"></i> Ajouter {{ ticker }} à une Watchlist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sélectionner une watchlist existante</label>
+                        <select class="form-select" id="existingWatchlist">
+                            <option value="">-- Choisir une watchlist --</option>
+                        </select>
+                    </div>
+                    <div class="text-center my-3">
+                        <strong>OU</strong>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Créer une nouvelle watchlist</label>
+                        <input type="text" class="form-control" id="newWatchlistName" placeholder="Nom de la watchlist">
+                    </div>
+                    <div id="watchlistAlert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="addToWatchlist()">
+                        <i class="bi bi-plus-circle"></i> Ajouter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let watchlistModal;
+
+        // Initialiser le modal au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            watchlistModal = new bootstrap.Modal(document.getElementById('watchlistModal'));
+        });
+
+        // Afficher le modal et charger les watchlists
+        async function showWatchlistModal() {
+            // Réinitialiser le formulaire
+            document.getElementById('existingWatchlist').value = '';
+            document.getElementById('newWatchlistName').value = '';
+            document.getElementById('watchlistAlert').innerHTML = '';
+
+            // Charger les watchlists existantes
+            try {
+                const response = await fetch('/watchlist/list/');
+                const data = await response.json();
+
+                if (data.success) {
+                    const select = document.getElementById('existingWatchlist');
+                    select.innerHTML = '<option value="">-- Choisir une watchlist --</option>';
+                    
+                    data.watchlists.forEach(wl => {
+                        const option = document.createElement('option');
+                        option.value = wl.id;
+                        option.textContent = wl.name;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement des watchlists:', error);
+            }
+
+            watchlistModal.show();
+        }
+
+        // Ajouter le ticker à une watchlist
+        async function addToWatchlist() {
+            const existingId = document.getElementById('existingWatchlist').value;
+            const newName = document.getElementById('newWatchlistName').value.trim();
+            const alertDiv = document.getElementById('watchlistAlert');
+
+            // Vérifier qu'au moins une option est remplie
+            if (!existingId && !newName) {
+                alertDiv.innerHTML = '<div class="alert alert-warning">Veuillez sélectionner une watchlist ou en créer une nouvelle.</div>';
+                return;
+            }
+
+            // Vérifier que les deux options ne sont pas remplies
+            if (existingId && newName) {
+                alertDiv.innerHTML = '<div class="alert alert-warning">Veuillez choisir une seule option.</div>';
+                return;
+            }
+
+            try {
+                let watchlistId = existingId;
+
+                // Si nouvelle watchlist, la créer d'abord
+                if (newName) {
+                    const createResponse = await fetch('/watchlist/create/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken()
+                        },
+                        body: JSON.stringify({ name: newName })
+                    });
+
+                    const createData = await createResponse.json();
+
+                    if (!createData.success) {
+                        alertDiv.innerHTML = `<div class="alert alert-danger">${createData.error}</div>`;
+                        return;
+                    }
+
+                    watchlistId = createData.watchlist.id;
+                }
+
+                // Ajouter le ticker à la watchlist
+                const addResponse = await fetch('/watchlist/add/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        watchlist_id: watchlistId,
+                        ticker: ticker
+                    })
+                });
+
+                const addData = await addResponse.json();
+
+                if (addData.success) {
+                    alertDiv.innerHTML = `<div class="alert alert-success">${addData.message}</div>`;
+                    setTimeout(() => {
+                        watchlistModal.hide();
+                    }, 1500);
+                } else {
+                    alertDiv.innerHTML = `<div class="alert alert-danger">${addData.error}</div>`;
+                }
+
+            } catch (error) {
+                alertDiv.innerHTML = `<div class="alert alert-danger">Erreur: ${error.message}</div>`;
+            }
+        }
+
+        // Récupérer le token CSRF
+        function getCsrfToken() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    return value;
+                }
+            }
+            return '';
+        }
     </script>
 </body>
 </html>

@@ -72,11 +72,27 @@
 </head>
 <body>
     <div class="container">
+        <!-- Navigation -->
+        <div class="row mb-3">
+            <div class="col-12 text-center">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-warning btn-lg active">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                </div>
+            </div>
+        </div>
+
         <!-- Titre -->
         <div class="text-center text-white mb-4">
             <h1 class="display-4">🔍 Screener US Stocks</h1>
             <p class="lead">Filtrage automatique avec calcul du RS Rating</p>
-            <a href="{% url 'home' %}" class="btn btn-outline-light btn-sm">← Retour à l'accueil</a>
         </div>
 
         <!-- Formulaire de filtres -->
@@ -288,6 +304,13 @@
                             // Ajouter les nouveaux résultats
                             document.querySelector('.container').appendChild(resultsSection);
                             
+                            // Sauvegarder les résultats dans sessionStorage
+                            sessionStorage.setItem('screenerResults', JSON.stringify({
+                                html: data.html,
+                                count: data.count,
+                                filters: filters
+                            }));
+                            
                             // Rendre les lignes du tableau cliquables
                             makeTableRowsClickable();
                             
@@ -364,8 +387,67 @@
             });
         }
 
+        // Restaurer les résultats sauvegardés au chargement de la page
+        function restoreResults() {
+            const savedResults = sessionStorage.getItem('screenerResults');
+            if (savedResults) {
+                try {
+                    const data = JSON.parse(savedResults);
+                    
+                    // Supprimer le message de bienvenue s'il existe
+                    const welcomeMsg = document.querySelector('#welcomeMessage');
+                    if (welcomeMsg) welcomeMsg.remove();
+                    
+                    // Supprimer les anciens résultats
+                    const oldResults = document.querySelectorAll('#resultsSection');
+                    oldResults.forEach(result => result.remove());
+                    
+                    // Créer le HTML de résultats
+                    const resultsSection = document.createElement('div');
+                    resultsSection.className = 'main-card';
+                    resultsSection.id = 'resultsSection';
+                    resultsSection.innerHTML = `
+                        <div class="card-body p-4">
+                            <h4 class="mb-3">
+                                <i class="bi bi-check-circle text-success"></i> 
+                                ${data.count} action${data.count > 1 ? 's' : ''} trouvée${data.count > 1 ? 's' : ''} (résultats restaurés)
+                            </h4>
+                            <div class="table-responsive">${data.html}</div>
+                            <hr class="my-4">
+                            <div class="alert alert-info">
+                                <strong><i class="bi bi-info-circle"></i> RS Rating :</strong> 
+                                Mesure la force relative de l'action par rapport au S&P 500 sur différentes périodes (63, 126, 189 et 252 jours).
+                                Un RS Rating > 95 indique que l'action performe mieux que 95% du marché.
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Ajouter les résultats restaurés
+                    document.querySelector('.container').appendChild(resultsSection);
+                    
+                    // Rendre les lignes du tableau cliquables
+                    makeTableRowsClickable();
+                    
+                    // Restaurer aussi les filtres dans le formulaire si nécessaire
+                    if (data.filters) {
+                        Object.keys(data.filters).forEach(key => {
+                            const input = document.querySelector(`[name="${key}"]`);
+                            if (input) {
+                                input.value = data.filters[key];
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error('Erreur lors de la restauration des résultats:', e);
+                }
+            }
+        }
+
         // Initialiser
         buildFiltersForm();
+        
+        // Restaurer les résultats au chargement
+        window.addEventListener('DOMContentLoaded', restoreResults);
     </script>
 </body>
 </html>
