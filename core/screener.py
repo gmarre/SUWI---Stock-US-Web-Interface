@@ -9,6 +9,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 import warnings
 from finvizfinance.screener.overview import Overview
+import time
 
 # Ignorer les warnings
 warnings.filterwarnings('ignore')
@@ -33,15 +34,16 @@ def calculate_rs_score(ticker_data, spx_data):
     Calcule le RS Score (score de performance relative par rapport au SPX)
     
     Args:
-        ticker_data: Series pandas des prix de clôture du ticker (252 jours minimum)
-        spx_data: Series pandas des prix de clôture du SPX (252 jours minimum)
+        ticker_data: Series pandas des prix de clôture du ticker (200 jours minimum)
+        spx_data: Series pandas des prix de clôture du SPX (200 jours minimum)
     
     Returns:
         float: RS Score ou np.nan si erreur
     """
     try:
-        # Vérifier qu'on a assez de données
-        if len(ticker_data) < 252 or len(spx_data) < 252:
+        # Vérifier qu'on a assez de données (seuil abaissé à 200)
+        min_required = 200
+        if len(ticker_data) < min_required or len(spx_data) < min_required:
             return np.nan
 
         # Récupérer les indices des 4 périodes
@@ -147,7 +149,7 @@ def calculate_rs_rating(rs_score):
     return np.nan
 
 
-def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252):
+def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252, min_data_days=200):
     """
     Ajoute les colonnes RS_Score et RS_Rating à un DataFrame de tickers
     
@@ -155,6 +157,7 @@ def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252):
         df: DataFrame pandas contenant les tickers
         ticker_column: Nom de la colonne contenant les symboles boursiers
         lookback_days: Nombre de jours historiques à analyser (défaut: 252)
+        min_data_days: Minimum de jours de données requis (défaut: 200)
     
     Returns:
         DataFrame: DataFrame enrichi avec RS_Score et RS_Rating
@@ -178,8 +181,31 @@ def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252):
         ticker = row[ticker_column].strip()
 
         try:
-            # Télécharger les données du ticker
-            ticker_data = yf.download(ticker, start=start_date, end=end_date, progress=False)['Close']
+            # Petit délai pour éviter le rate limiting de Yahoo Finance
+            time.sleep(0.1)
+            
+            # Télécharger les données du ticker avec retry
+            max_retries = 2
+            ticker_data = None
+            
+            for retry in range(max_retries):
+                try:
+                    ticker_data = yf.download(ticker, start=start_date, end=end_date, progress=False)['Close']
+                    if not ticker_data.empty:
+                        break
+                except Exception as download_error:
+                    if retry < max_retries - 1:
+                        time.sleep(1)  # Attendre 1 seconde avant de réessayer
+                    else:
+                        raise download_error
+            
+            # Vérifier si les données sont vides (seuil abaissé à 200 jours minimum)
+            if ticker_data is None or ticker_data.empty or len(ticker_data) < min_data_days:
+                data_len = len(ticker_data) if ticker_data is not None and not ticker_data.empty else 0
+                print(f"{idx+1:3d}. ⚠ {ticker}: Données insuffisantes (reçu {data_len} jours, minimum requis: {min_data_days})")
+                rs_scores.append(np.nan)
+                rs_ratings.append(np.nan)
+                continue
 
             # Calculer le RS Score
             rs_score = calculate_rs_score(ticker_data, spx_data)
@@ -194,7 +220,14 @@ def add_rs_rating_to_df(df, ticker_column='Ticker', lookback_days=252):
             print(f"{idx+1:3d}. {status}")
 
         except Exception as e:
-            print(f"{idx+1:3d}. ✗ {ticker}: Erreur ({str(e)[:30]})")
+            error_msg = str(e)
+            # Détecter les erreurs spécifiques de Yahoo Finance
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                print(f"{idx+1:3d}. ⚠ {ticker}: Erreur d'authentification Yahoo (401) - Rate limit atteint")
+            elif "404" in error_msg:
+                print(f"{idx+1:3d}. ⚠ {ticker}: Ticker non trouvé (404)")
+            else:
+                print(f"{idx+1:3d}. ✗ {ticker}: Erreur - {error_msg[:80]}")
             rs_scores.append(np.nan)
             rs_ratings.append(np.nan)
 

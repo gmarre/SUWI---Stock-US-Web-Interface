@@ -87,11 +87,12 @@
             <div class="row">
                 {% for watchlist in watchlists %}
                 <div class="col-lg-6 mb-4">
-                    <div class="card watchlist-card">
+                    <div class="card watchlist-card" style="border-left-color: {{ watchlist.color }};">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h4 class="mb-0">
-                                    <i class="bi bi-bookmark-star text-primary"></i> {{ watchlist.name }}
+                                    <span class="badge rounded-pill me-2" style="background-color: {{ watchlist.color }}; width: 12px; height: 12px; padding: 0;"></span>
+                                    {{ watchlist.name }}
                                 </h4>
                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteWatchlist({{ watchlist.id }}, '{{ watchlist.name }}')">
                                     <i class="bi bi-trash"></i> Supprimer
@@ -158,6 +159,71 @@
                         <label class="form-label">Nom de la watchlist</label>
                         <input type="text" class="form-control" id="createWatchlistName" placeholder="Ex: Tech Growth, Value Stocks...">
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Couleur du tag</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorRed" value="#dc3545">
+                                <label class="form-check-label" for="colorRed">
+                                    <span class="badge rounded-pill" style="background-color: #dc3545; width: 20px; height: 20px;"></span> Rouge
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorOrange" value="#fd7e14">
+                                <label class="form-check-label" for="colorOrange">
+                                    <span class="badge rounded-pill" style="background-color: #fd7e14; width: 20px; height: 20px;"></span> Orange
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorYellow" value="#ffc107">
+                                <label class="form-check-label" for="colorYellow">
+                                    <span class="badge rounded-pill" style="background-color: #ffc107; width: 20px; height: 20px;"></span> Jaune
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorGreen" value="#28a745">
+                                <label class="form-check-label" for="colorGreen">
+                                    <span class="badge rounded-pill" style="background-color: #28a745; width: 20px; height: 20px;"></span> Vert
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorTurquoise" value="#20c997">
+                                <label class="form-check-label" for="colorTurquoise">
+                                    <span class="badge rounded-pill" style="background-color: #20c997; width: 20px; height: 20px;"></span> Turquoise
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorCyan" value="#17a2b8">
+                                <label class="form-check-label" for="colorCyan">
+                                    <span class="badge rounded-pill" style="background-color: #17a2b8; width: 20px; height: 20px;"></span> Cyan
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorBlue" value="#007bff" checked>
+                                <label class="form-check-label" for="colorBlue">
+                                    <span class="badge rounded-pill" style="background-color: #007bff; width: 20px; height: 20px;"></span> Bleu
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorViolet" value="#6610f2">
+                                <label class="form-check-label" for="colorViolet">
+                                    <span class="badge rounded-pill" style="background-color: #6610f2; width: 20px; height: 20px;"></span> Violet
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorPink" value="#e83e8c">
+                                <label class="form-check-label" for="colorPink">
+                                    <span class="badge rounded-pill" style="background-color: #e83e8c; width: 20px; height: 20px;"></span> Rose
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="watchlistColor" id="colorGray" value="#6c757d">
+                                <label class="form-check-label" for="colorGray">
+                                    <span class="badge rounded-pill" style="background-color: #6c757d; width: 20px; height: 20px;"></span> Gris
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                     <div id="createAlert"></div>
                 </div>
                 <div class="modal-footer">
@@ -183,12 +249,16 @@
         function showCreateModal() {
             document.getElementById('createWatchlistName').value = '';
             document.getElementById('createAlert').innerHTML = '';
+            // Reset to blue by default
+            document.getElementById('colorBlue').checked = true;
             createModal.show();
         }
 
         // Créer une nouvelle watchlist
         async function createWatchlist() {
             const name = document.getElementById('createWatchlistName').value.trim();
+            const colorInput = document.querySelector('input[name="watchlistColor"]:checked');
+            const color = colorInput ? colorInput.value : '#007bff';
             const alertDiv = document.getElementById('createAlert');
 
             if (!name) {
@@ -203,7 +273,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': getCsrfToken()
                     },
-                    body: JSON.stringify({ name: name })
+                    body: JSON.stringify({ name: name, color: color })
                 });
 
                 const data = await response.json();

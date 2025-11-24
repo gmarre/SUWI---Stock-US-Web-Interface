@@ -379,6 +379,7 @@ def create_watchlist_ajax(request):
     try:
         data = json.loads(request.body)
         name = data.get('name', '').strip()
+        color = data.get('color', '#007bff')  # Bleu par défaut
         
         if not name:
             return JsonResponse({'success': False, 'error': 'Le nom est requis'})
@@ -387,13 +388,14 @@ def create_watchlist_ajax(request):
         if Watchlist.objects.filter(name=name).exists():
             return JsonResponse({'success': False, 'error': 'Une watchlist avec ce nom existe déjà'})
         
-        watchlist = Watchlist.objects.create(name=name)
+        watchlist = Watchlist.objects.create(name=name, color=color)
         
         return JsonResponse({
             'success': True,
             'watchlist': {
                 'id': watchlist.id,
-                'name': watchlist.name
+                'name': watchlist.name,
+                'color': watchlist.color
             }
         })
         
