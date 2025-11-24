@@ -2,9 +2,10 @@
 Vues de l'application core.
 """
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from .screener import run_screener
+from .models import Watchlist, WatchlistStock
 import json
 import os
 
@@ -29,33 +30,69 @@ def home(request):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>SUWI - Accueil</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <style>
             body {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                padding: 20px 0;
             }
             .card {
                 border-radius: 15px;
                 box-shadow: 0 10px 40px rgba(0,0,0,0.3);
             }
+            .feature-btn {
+                width: 100%;
+                padding: 30px;
+                margin: 10px 0;
+                font-size: 1.2rem;
+            }
         </style>
     </head>
     <body>
         <div class="container">
+            <!-- Navigation -->
+            <div class="row mb-4">
+                <div class="col-12 text-center">
+                    <div class="btn-group" role="group">
+                        <a href="/" class="btn btn-warning btn-lg active">
+                            <i class="bi bi-house"></i> Accueil
+                        </a>
+                        <a href="/screener/" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-filter"></i> Screener
+                        </a>
+                        <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-star-fill"></i> Watchlists
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
             <div class="row justify-content-center">
-                <div class="col-lg-6">
+                <div class="col-lg-8">
                     <div class="card">
                         <div class="card-body text-center p-5">
                             <h1 class="display-4 mb-3">🚀 SUWI</h1>
                             <p class="lead text-muted mb-4">Stock US Web Interface</p>
                             <hr class="my-4">
-                            <p>Application Django de screening et analyse de stocks US</p>
-                            <a href="/screener/" class="btn btn-primary btn-lg mt-3">
-                                🔍 Accéder au Screener
-                            </a>
+                            <p class="mb-4">Application Django de screening et analyse de stocks US</p>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <a href="/screener/" class="btn btn-primary feature-btn">
+                                        <i class="bi bi-filter-circle"></i><br>
+                                        Screener
+                                        <br><small>Filtrer les actions US</small>
+                                    </a>
+                                </div>
+                                <div class="col-md-6">
+                                    <a href="/watchlist/" class="btn btn-warning feature-btn">
+                                        <i class="bi bi-star-fill"></i><br>
+                                        Watchlists
+                                        <br><small>Gérer vos listes</small>
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -118,8 +155,28 @@ def screener_ajax(request):
         # Exécuter le screener
         df = run_screener(custom_filters=filters, rs_rating_min=rs_rating_min)
         
-        # Convertir en HTML
-        if not df.empty:
+        # Vérifier que df n'est pas None et n'est pas vide
+        if df is not None and not df.empty:
+            # Enrichir le DataFrame avec les tags de watchlist
+            tickers = df['Ticker'].tolist()
+            
+            # Créer un dictionnaire ticker -> liste de couleurs des watchlists
+            ticker_watchlists = {}
+            for ticker in tickers:
+                watchlists = Watchlist.objects.filter(stocks__ticker=ticker)
+                if watchlists.exists():
+                    ticker_watchlists[ticker] = [wl.color for wl in watchlists]
+            
+            # Ajouter une colonne avec les tags colorés au début du ticker
+            def add_watchlist_tags(row):
+                ticker = row['Ticker']
+                if ticker in ticker_watchlists:
+                    tags = ''.join([f'<span class="color-tag" style="background-color: {color};"></span>' for color in ticker_watchlists[ticker]])
+                    return f'{tags}{ticker}'
+                return ticker
+            
+            df['Ticker'] = df.apply(add_watchlist_tags, axis=1)
+            
             table_html = df.to_html(
                 classes='table table-striped table-hover',
                 index=False,
@@ -133,9 +190,34 @@ def screener_ajax(request):
                 'count': len(df)
             })
         else:
+            # Aucun résultat trouvé - retourner un tableau vide avec en-têtes
+            empty_html = '''
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Company</th>
+                        <th>Sector</th>
+                        <th>Industry</th>
+                        <th>Market Cap</th>
+                        <th>Price</th>
+                        <th>Change</th>
+                        <th>Volume</th>
+                        <th>RS_Rating</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox"></i> Aucune action ne correspond aux critères sélectionnés
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            '''
             return JsonResponse({
                 'success': True,
-                'html': '',
+                'html': empty_html,
                 'count': 0,
                 'message': 'Aucune action ne correspond aux critères.'
             })
@@ -154,9 +236,17 @@ def stock_detail(request, ticker):
     Args:
         ticker: Symbole boursier (ex: AAPL, TSLA)
     """
+    # Déterminer l'URL de retour intelligemment
+    referer = request.META.get('HTTP_REFERER', '/screener/')
+    # Si on vient de la watchlist, retourner au screener par défaut
+    if '/watchlist/' in referer:
+        back_url = '/screener/'
+    else:
+        back_url = referer
+    
     context = {
         'ticker': ticker.upper(),
-        'back_url': request.META.get('HTTP_REFERER', '/screener/')  # URL de retour
+        'back_url': back_url
     }
     
     return render(request, 'stock_detail.html', context)
@@ -274,6 +364,208 @@ def stock_data_ajax(request, ticker):
             'ohlcv': ohlcv,
             'indicators': indicators_data,
             'info': stock_info
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+# ============= WATCHLIST VIEWS =============
+
+def watchlist_view(request):
+    """
+    Vue pour afficher toutes les watchlists et leurs tickers.
+    """
+    watchlists = Watchlist.objects.all().prefetch_related('stocks')
+    
+    context = {
+        'watchlists': watchlists,
+        'back_url': request.META.get('HTTP_REFERER', '/screener/')
+    }
+    
+    return render(request, 'watchlist.html', context)
+
+
+def create_watchlist_ajax(request):
+    """
+    API AJAX pour créer une nouvelle watchlist.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        name = data.get('name', '').strip()
+        color = data.get('color', '#007bff')  # Bleu par défaut
+        
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Le nom est requis'})
+        
+        # Vérifier si une watchlist avec ce nom existe déjà
+        if Watchlist.objects.filter(name=name).exists():
+            return JsonResponse({'success': False, 'error': 'Une watchlist avec ce nom existe déjà'})
+        
+        watchlist = Watchlist.objects.create(name=name, color=color)
+        
+        return JsonResponse({
+            'success': True,
+            'watchlist': {
+                'id': watchlist.id,
+                'name': watchlist.name,
+                'color': watchlist.color
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def add_to_watchlist_ajax(request):
+    """
+    API AJAX pour ajouter un ticker à une watchlist.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        watchlist_id = data.get('watchlist_id')
+        ticker = data.get('ticker', '').strip().upper()
+        
+        if not watchlist_id or not ticker:
+            return JsonResponse({'success': False, 'error': 'Watchlist ID et ticker requis'})
+        
+        watchlist = get_object_or_404(Watchlist, id=watchlist_id)
+        
+        # Vérifier si le ticker existe déjà dans cette watchlist
+        if WatchlistStock.objects.filter(watchlist=watchlist, ticker=ticker).exists():
+            return JsonResponse({'success': False, 'error': f'{ticker} est déjà dans cette watchlist'})
+        
+        WatchlistStock.objects.create(watchlist=watchlist, ticker=ticker)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{ticker} ajouté à {watchlist.name}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def remove_from_watchlist_ajax(request):
+    """
+    API AJAX pour retirer un ticker d'une watchlist.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        watchlist_id = data.get('watchlist_id')
+        ticker = data.get('ticker', '').strip().upper()
+        
+        if not watchlist_id or not ticker:
+            return JsonResponse({'success': False, 'error': 'Watchlist ID et ticker requis'})
+        
+        watchlist = get_object_or_404(Watchlist, id=watchlist_id)
+        stock = get_object_or_404(WatchlistStock, watchlist=watchlist, ticker=ticker)
+        stock.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{ticker} retiré de {watchlist.name}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def delete_watchlist_ajax(request):
+    """
+    API AJAX pour supprimer une watchlist complète.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        watchlist_id = data.get('watchlist_id')
+        
+        if not watchlist_id:
+            return JsonResponse({'success': False, 'error': 'Watchlist ID requis'})
+        
+        watchlist = get_object_or_404(Watchlist, id=watchlist_id)
+        watchlist_name = watchlist.name
+        watchlist.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Watchlist "{watchlist_name}" supprimée'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def get_watchlists_ajax(request):
+    """
+    API AJAX pour récupérer toutes les watchlists (pour le dropdown).
+    """
+    try:
+        watchlists = Watchlist.objects.all().values('id', 'name')
+        return JsonResponse({
+            'success': True,
+            'watchlists': list(watchlists)
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def get_watchlist_tags_ajax(request):
+    """
+    API AJAX pour récupérer les tags (couleurs) des watchlists pour une liste de tickers.
+    Utilisé pour la mise à jour en temps réel des tags dans le screener.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        tickers = data.get('tickers', [])
+        
+        if not tickers:
+            return JsonResponse({'success': True, 'tags': {}})
+        
+        # Créer un dictionnaire ticker -> [couleurs]
+        ticker_tags = {}
+        for ticker in tickers:
+            watchlists = Watchlist.objects.filter(stocks__ticker=ticker)
+            if watchlists.exists():
+                ticker_tags[ticker] = [wl.color for wl in watchlists]
+            else:
+                ticker_tags[ticker] = []
+        
+        return JsonResponse({
+            'success': True,
+            'tags': ticker_tags
         })
         
     except Exception as e:

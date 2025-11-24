@@ -68,15 +68,41 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
+        
+        /* Tags watchlist style macOS */
+        .color-tag {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Navigation -->
+        <div class="row mb-3">
+            <div class="col-12 text-center">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-warning btn-lg active">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                </div>
+            </div>
+        </div>
+
         <!-- Titre -->
         <div class="text-center text-white mb-4">
             <h1 class="display-4">🔍 Screener US Stocks</h1>
             <p class="lead">Filtrage automatique avec calcul du RS Rating</p>
-            <a href="{% url 'home' %}" class="btn btn-outline-light btn-sm">← Retour à l'accueil</a>
         </div>
 
         <!-- Formulaire de filtres -->
@@ -129,6 +155,10 @@
             
             <p class="mt-3 text-muted" id="loadingStatus">Initialisation...</p>
             <small class="text-muted">Cette opération peut prendre 1 à 2 minutes</small>
+            
+            <button type="button" class="btn btn-danger mt-3" id="cancelButton" onclick="cancelScreener()">
+                <i class="bi bi-x-circle"></i> Annuler le chargement
+            </button>
         </div>
     </div>
 
@@ -138,6 +168,13 @@
         const config = {{ config|safe }};
         const currentFilters = {{ current_filters|safe }};
         const rsRatingMin = {{ rs_rating_min|default:0 }};
+        
+        // Variables pour gérer l'annulation
+        let abortController = null;
+        let progressInterval = null;
+        
+        // Variable pour stocker l'intervalle de mise à jour des tags
+        let updateTagsInterval = null;
 
         // Générer les champs de filtres dynamiquement
         function buildFiltersForm() {
@@ -175,12 +212,55 @@
             });
         }
 
+        // Fonction pour annuler le screener
+        function cancelScreener() {
+            // Annuler la requête fetch si elle est en cours
+            if (abortController) {
+                abortController.abort();
+            }
+            
+            // Arrêter l'intervalle de progression
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+            
+            // Fermer l'overlay
+            document.getElementById('loadingOverlay').style.display = 'none';
+            
+            // Réinitialiser la barre de progression
+            const progressBar = document.getElementById('progressBar');
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            document.getElementById('loadingStatus').textContent = 'Initialisation...';
+            
+            // Afficher un message d'annulation
+            const cancelDiv = document.createElement('div');
+            cancelDiv.className = 'alert alert-warning alert-dismissible fade show';
+            cancelDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i> Chargement annulé par l'utilisateur.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container').appendChild(cancelDiv);
+            
+            // Supprimer le message après 5 secondes
+            setTimeout(() => {
+                cancelDiv.remove();
+            }, 5000);
+        }
+
         // Gestion du formulaire
         document.getElementById('screenerForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             // Effacer les résultats sauvegardés (nouveau screener)
             sessionStorage.removeItem('screenerResults');
+            
+            // Arrêter la mise à jour des tags pendant le nouveau screener
+            stopWatchlistTagsUpdate();
+            
+            // Créer un nouveau AbortController pour pouvoir annuler la requête
+            abortController = new AbortController();
             
             // Afficher l'overlay de chargement
             const overlay = document.getElementById('loadingOverlay');
@@ -203,7 +283,7 @@
             let currentStatusIndex = 0;
             let statusStartTime = Date.now();
             
-            const progressInterval = setInterval(() => {
+            progressInterval = setInterval(() => {
                 const elapsed = Date.now() - statusStartTime;
                 const currentStatus = statuses[currentStatusIndex];
                 
@@ -235,14 +315,15 @@
                 }
             }
 
-            // Envoyer la requête AJAX
+            // Envoyer la requête AJAX avec possibilité d'annulation
             fetch('{% url "screener_ajax" %}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCSRFToken()
                 },
-                body: JSON.stringify(filters)
+                body: JSON.stringify(filters),
+                signal: abortController.signal
             })
             .then(response => response.json())
             .then(data => {
@@ -291,11 +372,14 @@
                             // Ajouter les nouveaux résultats
                             document.querySelector('.container').appendChild(resultsSection);
                             
-                            // Sauvegarder dans sessionStorage
+                            // Sauvegarder le HTML complet dans sessionStorage
                             sessionStorage.setItem('screenerResults', resultsSection.outerHTML);
                             
                             // Rendre les lignes du tableau cliquables
                             makeTableRowsClickable();
+                            
+                            // Démarrer la mise à jour automatique des tags
+                            startWatchlistTagsUpdate();
                             
                             // Scroller vers les résultats
                             resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -317,7 +401,17 @@
             })
             .catch(error => {
                 clearInterval(progressInterval);
+                progressInterval = null;
                 overlay.style.display = 'none';
+                
+                // Vérifier si c'est une annulation intentionnelle
+                if (error.name === 'AbortError') {
+                    console.log('Requête annulée par l\'utilisateur');
+                    // Ne rien faire, le message d'annulation est déjà affiché par cancelScreener()
+                    return;
+                }
+                
+                // Seulement afficher l'erreur si ce n'est pas une annulation
                 alert('Erreur lors de la connexion au serveur: ' + error);
             });
         });
@@ -357,8 +451,13 @@
             const rows = table.querySelectorAll('tbody tr');
             rows.forEach(row => {
                 row.addEventListener('click', function() {
-                    // Récupérer le ticker (première cellule)
-                    const ticker = this.cells[0].textContent.trim();
+                    // Récupérer le ticker (première cellule) - textContent extrait le texte sans HTML
+                    let ticker = this.cells[0].textContent.trim();
+                    
+                    // Si le ticker contient des espaces (à cause des tags), prendre le dernier mot
+                    // qui est le ticker réel (après les tags)
+                    const parts = ticker.split(/\s+/);
+                    ticker = parts[parts.length - 1];
                     
                     // Rediriger vers la page de détail
                     window.location.href = `/stock/${ticker}/`;
@@ -374,7 +473,7 @@
         function restoreSavedResults() {
             const savedResults = sessionStorage.getItem('screenerResults');
             if (savedResults) {
-                // Supprimer le message de bienvenue si présent
+                // Supprimer le message de bienvenue
                 const welcomeMsg = document.querySelector('#welcomeMessage');
                 if (welcomeMsg) welcomeMsg.remove();
                 
@@ -382,7 +481,7 @@
                 const oldResults = document.querySelectorAll('#resultsSection');
                 oldResults.forEach(result => result.remove());
                 
-                // Ajouter les résultats sauvegardés
+                // Insérer le HTML sauvegardé
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = savedResults;
                 document.querySelector('.container').appendChild(tempDiv.firstElementChild);
@@ -392,9 +491,93 @@
             }
         }
 
+        // Fonction pour mettre à jour les tags des watchlists dans le tableau
+        function updateWatchlistTags() {
+            const table = document.querySelector('#resultsSection table');
+            if (!table) return;
+            
+            const rows = table.querySelectorAll('tbody tr');
+            const tickers = [];
+            
+            // Extraire tous les tickers du tableau
+            rows.forEach(row => {
+                let ticker = row.cells[0].textContent.trim();
+                const parts = ticker.split(/\s+/);
+                ticker = parts[parts.length - 1];
+                tickers.push(ticker);
+            });
+            
+            if (tickers.length === 0) return;
+            
+            // Demander au backend les tags pour ces tickers
+            fetch('/api/get-watchlist-tags/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify({ tickers: tickers })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mettre à jour chaque ligne avec les nouveaux tags
+                    rows.forEach(row => {
+                        let ticker = row.cells[0].textContent.trim();
+                        const parts = ticker.split(/\s+/);
+                        ticker = parts[parts.length - 1];
+                        
+                        const tags = data.tags[ticker] || [];
+                        const tagsHtml = tags.map(color => 
+                            `<span class="color-tag" style="background-color: ${color};"></span>`
+                        ).join('');
+                        
+                        // Mettre à jour le contenu de la cellule
+                        row.cells[0].innerHTML = tagsHtml + ticker;
+                    });
+                    
+                    // Mettre à jour le sessionStorage avec le nouveau HTML
+                    const resultsSection = document.querySelector('#resultsSection');
+                    if (resultsSection) {
+                        sessionStorage.setItem('screenerResults', resultsSection.outerHTML);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la mise à jour des tags:', error);
+            });
+        }
+        
+        // Démarrer la mise à jour automatique des tags toutes les 5 secondes
+        function startWatchlistTagsUpdate() {
+            // Arrêter l'ancien intervalle s'il existe
+            if (updateTagsInterval) {
+                clearInterval(updateTagsInterval);
+            }
+            
+            // Mettre à jour immédiatement
+            updateWatchlistTags();
+            
+            // Puis toutes les 5 secondes
+            updateTagsInterval = setInterval(updateWatchlistTags, 5000);
+        }
+        
+        // Arrêter la mise à jour automatique
+        function stopWatchlistTagsUpdate() {
+            if (updateTagsInterval) {
+                clearInterval(updateTagsInterval);
+                updateTagsInterval = null;
+            }
+        }
+        
         // Initialiser
         buildFiltersForm();
         restoreSavedResults();
+        
+        // Démarrer la mise à jour des tags si des résultats sont affichés
+        if (document.querySelector('#resultsSection')) {
+            startWatchlistTagsUpdate();
+        }
     </script>
 </body>
 </html>

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Watchlists - SUWI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        .watchlist-card {
+            border: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .watchlist-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        
+        /* Tags style macOS */
+        .color-tag {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        .watchlist-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Sélecteur de couleurs style macOS */
+        .color-picker {
+            display: flex !important;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            justify-content: center;
+        }
+        
+        .color-option {
+            position: relative;
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        .color-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .color-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            display: block;
+        }
+        
+        .color-option input[type="radio"]:checked + .color-circle {
+            border-color: #000;
+            box-shadow: 0 0 0 2px #fff, 0 0 0 4px #000;
+            transform: scale(1.1);
+        }
+        
+        .color-circle:hover {
+            transform: scale(1.15);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+        }
+        
+        /* Assurer la visibilité dans le modal */
+        .modal-body .color-picker {
+            min-height: 80px;
+        }
+        
+        .ticker-badge {
+            font-size: 0.9rem;
+            padding: 8px 12px;
+            margin: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .ticker-badge:hover {
+            transform: scale(1.05);
+        }
+        .stock-link {
+            text-decoration: none;
+            color: inherit;
+        }
+        .delete-icon {
+            cursor: pointer;
+            color: #dc3545;
+            transition: color 0.2s;
+        }
+        .delete-icon:hover {
+            color: #a71d2a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Navigation -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-warning btn-lg active">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                </div>
+                <button class="btn btn-success btn-lg float-end" onclick="showCreateModal()">
+                    <i class="bi bi-plus-circle"></i> Nouvelle Watchlist
+                </button>
+            </div>
+        </div>
+
+        <!-- Titre -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h1 class="mb-0">
+                    <i class="bi bi-star-fill text-warning"></i> Mes Watchlists
+                </h1>
+                <p class="text-muted mb-0">Gérez vos listes de surveillance d'actions</p>
+            </div>
+        </div>
+
+        <!-- Watchlists -->
+        {% if watchlists %}
+            <div class="row">
+                {% for watchlist in watchlists %}
+                <div class="col-lg-6 mb-4">
+                    <div class="card watchlist-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="watchlist-title">
+                                    <span class="color-tag" style="background-color: {{ watchlist.color }};"></span>
+                                    <h4 class="mb-0">{{ watchlist.name }}</h4>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteWatchlist({{ watchlist.id }}, '{{ watchlist.name }}')">
+                                    <i class="bi bi-trash"></i> Supprimer
+                                </button>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar3"></i> Créée le {{ watchlist.created_at|date:"d/m/Y à H:i" }}
+                                </small>
+                                <span class="badge bg-primary ms-2">{{ watchlist.stock_count }} action{{ watchlist.stock_count|pluralize }}</span>
+                            </div>
+
+                            {% if watchlist.stocks.all %}
+                                <div class="mt-3">
+                                    <h6 class="text-muted mb-2">Actions:</h6>
+                                    <div class="d-flex flex-wrap">
+                                        {% for stock in watchlist.stocks.all %}
+                                            <div class="ticker-badge bg-light border position-relative">
+                                                <span class="color-tag" style="background-color: {{ watchlist.color }};"></span>
+                                                <a href="/stock/{{ stock.ticker }}/" class="stock-link">
+                                                    <strong>{{ stock.ticker }}</strong>
+                                                </a>
+                                                <i class="bi bi-x-circle delete-icon ms-2" 
+                                                   onclick="removeFromWatchlist({{ watchlist.id }}, '{{ stock.ticker }}', '{{ watchlist.name }}')"
+                                                   title="Retirer de la watchlist"></i>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info mt-3">
+                                    <i class="bi bi-info-circle"></i> Aucune action dans cette watchlist
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="main-card">
+                <div class="card-body p-5 text-center">
+                    <i class="bi bi-star" style="font-size: 4rem; color: #ddd;"></i>
+                    <h4 class="mt-3 text-muted">Aucune watchlist pour le moment</h4>
+                    <p class="text-muted">Créez votre première watchlist pour suivre vos actions préférées</p>
+                    <button class="btn btn-primary btn-lg mt-3" onclick="showCreateModal()">
+                        <i class="bi bi-plus-circle"></i> Créer ma première Watchlist
+                    </button>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Modal pour créer une watchlist -->
+    <div class="modal fade" id="createModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Nouvelle Watchlist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la watchlist</label>
+                        <input type="text" class="form-control" id="createWatchlistName" placeholder="Ex: Tech Growth, Value Stocks...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Choisir une couleur</label>
+                        <div class="color-picker">
+                            <label class="color-option" title="Rouge">
+                                <input type="radio" name="watchlistColor" value="#FF3B30">
+                                <div class="color-circle" style="background-color: #FF3B30;"></div>
+                            </label>
+                            <label class="color-option" title="Orange">
+                                <input type="radio" name="watchlistColor" value="#FF9500">
+                                <div class="color-circle" style="background-color: #FF9500;"></div>
+                            </label>
+                            <label class="color-option" title="Jaune">
+                                <input type="radio" name="watchlistColor" value="#FFCC00">
+                                <div class="color-circle" style="background-color: #FFCC00;"></div>
+                            </label>
+                            <label class="color-option" title="Vert">
+                                <input type="radio" name="watchlistColor" value="#34C759">
+                                <div class="color-circle" style="background-color: #34C759;"></div>
+                            </label>
+                            <label class="color-option" title="Menthe">
+                                <input type="radio" name="watchlistColor" value="#00C7BE">
+                                <div class="color-circle" style="background-color: #00C7BE;"></div>
+                            </label>
+                            <label class="color-option" title="Cyan">
+                                <input type="radio" name="watchlistColor" value="#32ADE6">
+                                <div class="color-circle" style="background-color: #32ADE6;"></div>
+                            </label>
+                            <label class="color-option" title="Bleu">
+                                <input type="radio" name="watchlistColor" value="#007AFF" checked>
+                                <div class="color-circle" style="background-color: #007AFF;"></div>
+                            </label>
+                            <label class="color-option" title="Indigo">
+                                <input type="radio" name="watchlistColor" value="#5856D6">
+                                <div class="color-circle" style="background-color: #5856D6;"></div>
+                            </label>
+                            <label class="color-option" title="Violet">
+                                <input type="radio" name="watchlistColor" value="#AF52DE">
+                                <div class="color-circle" style="background-color: #AF52DE;"></div>
+                            </label>
+                            <label class="color-option" title="Rose">
+                                <input type="radio" name="watchlistColor" value="#FF2D55">
+                                <div class="color-circle" style="background-color: #FF2D55;"></div>
+                            </label>
+                            <label class="color-option" title="Gris">
+                                <input type="radio" name="watchlistColor" value="#8E8E93">
+                                <div class="color-circle" style="background-color: #8E8E93;"></div>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="createAlert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="createWatchlist()">
+                        <i class="bi bi-check-circle"></i> Créer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let createModal;
+
+        // Initialiser le modal au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            createModal = new bootstrap.Modal(document.getElementById('createModal'));
+        });
+
+        // Afficher le modal de création
+        function showCreateModal() {
+            document.getElementById('createWatchlistName').value = '';
+            document.getElementById('createAlert').innerHTML = '';
+            // Reset to blue by default
+            const blueRadio = document.querySelector('input[name="watchlistColor"][value="#007AFF"]');
+            if (blueRadio) blueRadio.checked = true;
+            createModal.show();
+        }
+
+        // Créer une nouvelle watchlist
+        async function createWatchlist() {
+            const name = document.getElementById('createWatchlistName').value.trim();
+            const colorInput = document.querySelector('input[name="watchlistColor"]:checked');
+            const color = colorInput ? colorInput.value : '#007bff';
+            const alertDiv = document.getElementById('createAlert');
+
+            if (!name) {
+                alertDiv.innerHTML = '<div class="alert alert-warning">Veuillez entrer un nom.</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch('/watchlist/create/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ name: name, color: color })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alertDiv.innerHTML = '<div class="alert alert-success">Watchlist créée avec succès!</div>';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    alertDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                }
+            } catch (error) {
+                alertDiv.innerHTML = `<div class="alert alert-danger">Erreur: ${error.message}</div>`;
+            }
+        }
+
+        // Supprimer une watchlist
+        async function deleteWatchlist(watchlistId, watchlistName) {
+            if (!confirm(`Êtes-vous sûr de vouloir supprimer la watchlist "${watchlistName}" et toutes ses actions?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/watchlist/delete/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ watchlist_id: watchlistId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        }
+
+        // Retirer une action d'une watchlist
+        async function removeFromWatchlist(watchlistId, ticker, watchlistName) {
+            if (!confirm(`Retirer ${ticker} de "${watchlistName}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/watchlist/remove/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        watchlist_id: watchlistId,
+                        ticker: ticker
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        }
+
+        // Récupérer le token CSRF
+        function getCsrfToken() {
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'csrftoken') {
+                    return value;
+                }
+            }
+            return '';
+        }
+    </script>
+</body>
+</html>

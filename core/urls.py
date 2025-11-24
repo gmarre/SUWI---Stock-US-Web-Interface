@@ -20,4 +20,15 @@ urlpatterns = [
     
     # API AJAX pour les données de graphique
     path('stock/<str:ticker>/data/', views.stock_data_ajax, name='stock_data_ajax'),
+    
+    # Watchlists
+    path('watchlist/', views.watchlist_view, name='watchlist'),
+    path('watchlist/create/', views.create_watchlist_ajax, name='create_watchlist'),
+    path('watchlist/add/', views.add_to_watchlist_ajax, name='add_to_watchlist'),
+    path('watchlist/remove/', views.remove_from_watchlist_ajax, name='remove_from_watchlist'),
+    path('watchlist/delete/', views.delete_watchlist_ajax, name='delete_watchlist'),
+    path('watchlist/list/', views.get_watchlists_ajax, name='get_watchlists'),
+    
+    # API pour mise à jour des tags
+    path('api/get-watchlist-tags/', views.get_watchlist_tags_ajax, name='get_watchlist_tags'),
 ]
