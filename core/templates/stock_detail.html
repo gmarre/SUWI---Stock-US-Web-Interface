@@ -189,6 +189,24 @@
             </div>
         </div>
 
+        <!-- Boutons de Trading -->
+        <div class="main-card">
+            <div class="card-body p-4 text-center">
+                <h4 class="mb-4"><i class="bi bi-bar-chart-line"></i> Trading</h4>
+                <div class="d-flex justify-content-center gap-3">
+                    <button type="button" class="btn btn-success btn-lg px-5" onclick="openTradingModal('BUY')">
+                        <i class="bi bi-arrow-up-circle"></i> Acheter
+                    </button>
+                    <button type="button" class="btn btn-danger btn-lg px-5" onclick="openTradingModal('SELL')">
+                        <i class="bi bi-arrow-down-circle"></i> Vendre
+                    </button>
+                </div>
+                <small class="text-muted d-block mt-3">
+                    <i class="bi bi-shield-check"></i> Limite maximale: 5 000$ par ordre
+                </small>
+            </div>
+        </div>
+
         <!-- Statistiques détaillées -->
         <div class="main-card">
             <div class="card-body p-4">
@@ -734,6 +752,219 @@
                 }
             }
             return '';
+        }
+
+        // Variables pour le trading
+        let currentTradingAction = null;
+        let currentPrice = 0;
+
+        // Ouvrir le modal de trading
+        function openTradingModal(action) {
+            currentTradingAction = action;
+            
+            // Récupérer le prix actuel depuis les statistiques
+            const priceElement = document.querySelector('#statsContainer');
+            if (priceElement) {
+                // Le prix est dans les stats, on va le chercher
+                fetch(`/stock/{{ ticker }}/price/`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            currentPrice = data.price;
+                            showTradingModal(action);
+                        }
+                    });
+            } else {
+                // Fallback: utiliser un prix par défaut
+                currentPrice = 100;
+                showTradingModal(action);
+            }
+        }
+
+        function showTradingModal(action) {
+            const actionText = action === 'BUY' ? 'Achat' : 'Vente';
+            const btnClass = action === 'BUY' ? 'success' : 'danger';
+            const icon = action === 'BUY' ? 'arrow-up-circle' : 'arrow-down-circle';
+            
+            const modalHTML = `
+                <div class="modal fade" id="tradingModal" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-${btnClass} text-white">
+                                <h5 class="modal-title">
+                                    <i class="bi bi-${icon}"></i> ${actionText} {{ ticker }}
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div id="tradingAlert"></div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Prix actuel</label>
+                                    <input type="text" class="form-control" value="$${currentPrice.toFixed(2)}" readonly>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Quantité</label>
+                                    <input type="number" class="form-control" id="tradeQuantity" min="1" value="1" 
+                                           onchange="updateTotalValue()">
+                                    <small class="text-muted">Nombre d'actions</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Take Profit (%) <span class="text-muted">(Optionnel)</span></label>
+                                    <input type="number" class="form-control" id="takeProfitPct" min="0" step="0.1" placeholder="Ex: 5">
+                                    <small class="text-muted">Vente automatique si gain de X%</small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Stop Loss (%) <span class="text-muted">(Optionnel)</span></label>
+                                    <input type="number" class="form-control" id="stopLossPct" min="0" step="0.1" placeholder="Ex: 2">
+                                    <small class="text-muted">Vente automatique si perte de X%</small>
+                                </div>
+                                
+                                <div class="alert alert-info">
+                                    <strong><i class="bi bi-calculator"></i> Montant total:</strong>
+                                    <span id="totalValue" class="float-end fw-bold">$${currentPrice.toFixed(2)}</span>
+                                </div>
+                                
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle"></i> Limite maximale: <strong>$5,000</strong>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                                <button type="button" class="btn btn-${btnClass}" onclick="confirmOrder()">
+                                    <i class="bi bi-${icon}"></i> Confirmer ${actionText}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Supprimer l'ancien modal s'il existe
+            const oldModal = document.getElementById('tradingModal');
+            if (oldModal) oldModal.remove();
+            
+            // Ajouter le nouveau modal
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Afficher le modal
+            const modal = new bootstrap.Modal(document.getElementById('tradingModal'));
+            modal.show();
+        }
+
+        function updateTotalValue() {
+            const quantity = parseInt(document.getElementById('tradeQuantity').value) || 1;
+            const total = currentPrice * quantity;
+            document.getElementById('totalValue').textContent = `$${total.toFixed(2)}`;
+            
+            // Vérifier la limite
+            if (total > 5000) {
+                document.getElementById('totalValue').parentElement.classList.remove('alert-info');
+                document.getElementById('totalValue').parentElement.classList.add('alert-danger');
+            } else {
+                document.getElementById('totalValue').parentElement.classList.remove('alert-danger');
+                document.getElementById('totalValue').parentElement.classList.add('alert-info');
+            }
+        }
+
+        function confirmOrder() {
+            const quantity = parseInt(document.getElementById('tradeQuantity').value) || 0;
+            const takeProfitPct = parseFloat(document.getElementById('takeProfitPct').value) || 0;
+            const stopLossPct = parseFloat(document.getElementById('stopLossPct').value) || 0;
+            const total = currentPrice * quantity;
+            
+            // Validations
+            if (quantity <= 0) {
+                showTradingAlert('Veuillez entrer une quantité valide', 'danger');
+                return;
+            }
+            
+            if (total > 5000) {
+                showTradingAlert('Le montant dépasse la limite de $5,000', 'danger');
+                return;
+            }
+            
+            // Première confirmation
+            const actionText = currentTradingAction === 'BUY' ? 'acheter' : 'vendre';
+            const confirmMsg = `Êtes-vous sûr de vouloir ${actionText} ${quantity} action(s) de {{ ticker }} pour $${total.toFixed(2)} ?`;
+            
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+            
+            // Deuxième confirmation
+            const finalConfirm = `CONFIRMATION FINALE: Cet ordre sera envoyé à Interactive Brokers. Confirmer ?`;
+            
+            if (!confirm(finalConfirm)) {
+                return;
+            }
+            
+            // Envoyer l'ordre
+            placeOrder(quantity, takeProfitPct, stopLossPct);
+        }
+
+        async function placeOrder(quantity, takeProfitPct, stopLossPct) {
+            const alertDiv = document.getElementById('tradingAlert');
+            alertDiv.innerHTML = `
+                <div class="alert alert-info">
+                    <div class="spinner-border spinner-border-sm me-2"></div>
+                    Envoi de l'ordre...
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/trading/place-order/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        ticker: '{{ ticker }}',
+                        action: currentTradingAction,
+                        quantity: quantity,
+                        take_profit_pct: takeProfitPct || null,
+                        stop_loss_pct: stopLossPct || null
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alertDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> ${data.message}
+                            <hr>
+                            <small>
+                                <strong>Détails:</strong><br>
+                                Ordre #${data.order_id}<br>
+                                ${quantity} actions @ $${data.details.price.toFixed(2)}<br>
+                                Total: $${data.details.total_value.toFixed(2)}
+                                ${data.details.take_profit ? '<br>Take Profit: ' + data.details.take_profit : ''}
+                                ${data.details.stop_loss ? '<br>Stop Loss: ' + data.details.stop_loss : ''}
+                            </small>
+                        </div>
+                    `;
+                    
+                    // Fermer le modal après 3 secondes
+                    setTimeout(() => {
+                        bootstrap.Modal.getInstance(document.getElementById('tradingModal')).hide();
+                    }, 3000);
+                } else {
+                    showTradingAlert(data.message || 'Erreur lors du placement de l\'ordre', 'danger');
+                }
+                
+            } catch (error) {
+                showTradingAlert('Erreur de connexion: ' + error.message, 'danger');
+            }
+        }
+
+        function showTradingAlert(message, type) {
+            const alertDiv = document.getElementById('tradingAlert');
+            alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
         }
     </script>
 </body>

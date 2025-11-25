@@ -1,0 +1,16 @@
+{
+    "host": "127.0.0.1",
+    "port": 4002,
+    "client_id": 1,
+    "token": "FAKE_TOKEN_FOR_DEVELOPMENT",
+    "max_order_value": 5000,
+    "paper_trading": true,
+    "notes": {
+        "host": "Adresse IP du serveur IB Gateway/TWS (localhost par défaut)",
+        "port": "4002 pour paper trading, 7497 pour live TWS, 4001 pour live Gateway",
+        "client_id": "ID unique pour cette connexion (1-32)",
+        "token": "Token de sécurité (à implémenter plus tard avec authentification utilisateur)",
+        "max_order_value": "Limite maximale par ordre en USD",
+        "paper_trading": "true pour compte demo, false pour compte réel"
+    }
+}

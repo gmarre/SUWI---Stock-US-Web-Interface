@@ -31,4 +31,8 @@ urlpatterns = [
     
     # API pour mise à jour des tags
     path('api/get-watchlist-tags/', views.get_watchlist_tags_ajax, name='get_watchlist_tags'),
+    
+    # Trading API
+    path('stock/<str:ticker>/price/', views.get_stock_price_ajax, name='get_stock_price'),
+    path('trading/place-order/', views.place_order_ajax, name='place_order'),
 ]

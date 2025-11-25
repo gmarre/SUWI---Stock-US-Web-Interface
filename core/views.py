@@ -6,8 +6,10 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
 from .screener import run_screener
 from .models import Watchlist, WatchlistStock
+from .trading import get_trader
 import json
 import os
+import yfinance as yf
 
 
 def load_screener_config():
@@ -572,4 +574,91 @@ def get_watchlist_tags_ajax(request):
         return JsonResponse({
             'success': False,
             'error': str(e)
+        })
+
+
+def get_stock_price_ajax(request, ticker):
+    """
+    API AJAX pour récupérer le prix actuel d'une action.
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose', 0)
+        
+        return JsonResponse({
+            'success': True,
+            'price': float(price)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'price': 0
+        })
+
+
+def place_order_ajax(request):
+    """
+    API AJAX pour placer un ordre via Interactive Brokers.
+    Effectue les vérifications de sécurité et place un ordre bracket.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Récupérer les paramètres
+        ticker = data.get('ticker')
+        action = data.get('action')  # 'BUY' ou 'SELL'
+        quantity = int(data.get('quantity', 0))
+        take_profit_pct = data.get('take_profit_pct')
+        stop_loss_pct = data.get('stop_loss_pct')
+        
+        # Validations
+        if not ticker or not action:
+            return JsonResponse({
+                'success': False,
+                'message': 'Paramètres manquants'
+            })
+        
+        if action not in ['BUY', 'SELL']:
+            return JsonResponse({
+                'success': False,
+                'message': 'Action invalide (doit être BUY ou SELL)'
+            })
+        
+        if quantity <= 0:
+            return JsonResponse({
+                'success': False,
+                'message': 'Quantité invalide'
+            })
+        
+        # Convertir None en None pour les pourcentages
+        if take_profit_pct:
+            take_profit_pct = float(take_profit_pct)
+        if stop_loss_pct:
+            stop_loss_pct = float(stop_loss_pct)
+        
+        # Récupérer l'instance du trader
+        trader = get_trader()
+        
+        # Placer l'ordre bracket
+        result = trader.place_bracket_order(
+            ticker=ticker,
+            action=action,
+            quantity=quantity,
+            take_profit_pct=take_profit_pct,
+            stop_loss_pct=stop_loss_pct
+        )
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'Erreur serveur: {str(e)}'
         })

@@ -11,6 +11,9 @@ yfinance>=0.2.0
 pandas>=2.0.0
 numpy>=1.24.0
 
+# Interactive Brokers API
+ib_insync>=0.9.86
+
 # Bibliothèques supplémentaires (si nécessaire)
 requests>=2.31.0
 lxml>=4.9.0
