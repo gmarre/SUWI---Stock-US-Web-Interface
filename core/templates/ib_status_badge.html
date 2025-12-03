@@ -1,0 +1,116 @@
+<!-- Indicateur de statut IB à inclure dans toutes les pages -->
+<style>
+    .ib-status-badge {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+        padding: 12px 20px;
+        border-radius: 25px;
+        background: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .ib-status-badge:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    }
+    
+    .ib-status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        animation: ib-pulse 2s infinite;
+    }
+    
+    .ib-status-connected {
+        background-color: #28a745;
+        box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+    }
+    
+    .ib-status-warning {
+        background-color: #ffc107;
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+    }
+    
+    .ib-status-disconnected {
+        background-color: #dc3545;
+        box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+    }
+    
+    @keyframes ib-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .ib-status-text {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+</style>
+
+<a href="/ib-auth/" class="ib-status-badge" id="ibStatusBadge" title="Cliquez pour gérer la connexion IB">
+    <span class="ib-status-dot ib-status-disconnected" id="ibStatusDot"></span>
+    <span class="ib-status-text" id="ibStatusText">IB: Vérification...</span>
+</a>
+
+<script>
+    // Polling du statut IB
+    let ibStatusInterval = null;
+    
+    function checkIBStatus() {
+        fetch('/ib-session-status/')
+            .then(response => response.json())
+            .then(data => {
+                updateIBStatusBadge(data);
+            })
+            .catch(error => {
+                console.error('Erreur lors de la vérification du statut IB:', error);
+                updateIBStatusBadge({
+                    authenticated: false,
+                    connected: false
+                });
+            });
+    }
+    
+    function updateIBStatusBadge(data) {
+        const dot = document.getElementById('ibStatusDot');
+        const text = document.getElementById('ibStatusText');
+        
+        if (data.authenticated && data.connected) {
+            dot.className = 'ib-status-dot ib-status-connected';
+            
+            if (data.expires_soon) {
+                dot.className = 'ib-status-dot ib-status-warning';
+                
+                // Calculer le temps restant
+                const hours = Math.floor(data.time_until_expiry_seconds / 3600);
+                const minutes = Math.floor((data.time_until_expiry_seconds % 3600) / 60);
+                text.textContent = `IB: Expire dans ${hours}h${minutes}m`;
+            } else {
+                text.textContent = 'IB: Connecté ✓';
+            }
+        } else {
+            dot.className = 'ib-status-dot ib-status-disconnected';
+            text.textContent = 'IB: Non connecté';
+        }
+    }
+    
+    // Démarrer le polling au chargement
+    if (!ibStatusInterval) {
+        checkIBStatus();
+        ibStatusInterval = setInterval(checkIBStatus, 10000); // Toutes les 10 secondes
+    }
+    
+    // Nettoyer l'intervalle quand on quitte la page
+    window.addEventListener('beforeunload', () => {
+        if (ibStatusInterval) {
+            clearInterval(ibStatusInterval);
+        }
+    });
+</script>

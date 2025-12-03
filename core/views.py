@@ -7,6 +7,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from .screener import run_screener
 from .models import Watchlist, WatchlistStock
 from .trading import get_trader
+from .ib_session_manager import get_session_manager
 import json
 import os
 import yfinance as yf
@@ -66,32 +67,55 @@ def home(request):
                         <a href="/watchlist/" class="btn btn-outline-light btn-lg">
                             <i class="bi bi-star-fill"></i> Watchlists
                         </a>
+                        <a href="/positions/" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-graph-up"></i> Positions
+                        </a>
+                        <a href="/history/" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-clock-history"></i> Historique
+                        </a>
+                        <a href="/profile/" class="btn btn-outline-light btn-lg">
+                            <i class="bi bi-person-circle"></i> Profil
+                        </a>
                     </div>
                 </div>
             </div>
             
             <div class="row justify-content-center">
-                <div class="col-lg-8">
+                <div class="col-lg-10">
                     <div class="card">
                         <div class="card-body text-center p-5">
                             <h1 class="display-4 mb-3">🚀 SUWI</h1>
                             <p class="lead text-muted mb-4">Stock US Web Interface</p>
                             <hr class="my-4">
-                            <p class="mb-4">Application Django de screening et analyse de stocks US</p>
+                            <p class="mb-4">Application Django de screening, analyse et trading de stocks US</p>
                             
                             <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <a href="/screener/" class="btn btn-primary feature-btn">
                                         <i class="bi bi-filter-circle"></i><br>
                                         Screener
                                         <br><small>Filtrer les actions US</small>
                                     </a>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <a href="/watchlist/" class="btn btn-warning feature-btn">
                                         <i class="bi bi-star-fill"></i><br>
                                         Watchlists
                                         <br><small>Gérer vos listes</small>
+                                    </a>
+                                </div>
+                                <div class="col-md-3">
+                                    <a href="/positions/" class="btn btn-success feature-btn">
+                                        <i class="bi bi-graph-up"></i><br>
+                                        Positions
+                                        <br><small>Portefeuille actif</small>
+                                    </a>
+                                </div>
+                                <div class="col-md-3">
+                                    <a href="/history/" class="btn btn-info feature-btn">
+                                        <i class="bi bi-clock-history"></i><br>
+                                        Historique
+                                        <br><small>Analyse performance</small>
                                     </a>
                                 </div>
                             </div>
@@ -428,6 +452,51 @@ def create_watchlist_ajax(request):
         })
 
 
+def update_watchlist_ajax(request):
+    """
+    API AJAX pour mettre à jour une watchlist (nom et couleur).
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        data = json.loads(request.body)
+        watchlist_id = data.get('watchlist_id')
+        name = data.get('name', '').strip()
+        color = data.get('color', '#007bff')
+        
+        if not watchlist_id:
+            return JsonResponse({'success': False, 'error': 'Watchlist ID requis'})
+        
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Le nom est requis'})
+        
+        watchlist = get_object_or_404(Watchlist, id=watchlist_id)
+        
+        # Vérifier si une autre watchlist avec ce nom existe déjà
+        if Watchlist.objects.filter(name=name).exclude(id=watchlist_id).exists():
+            return JsonResponse({'success': False, 'error': 'Une autre watchlist avec ce nom existe déjà'})
+        
+        watchlist.name = name
+        watchlist.color = color
+        watchlist.save()
+        
+        return JsonResponse({
+            'success': True,
+            'watchlist': {
+                'id': watchlist.id,
+                'name': watchlist.name,
+                'color': watchlist.color
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
 def add_to_watchlist_ajax(request):
     """
     API AJAX pour ajouter un ticker à une watchlist.
@@ -616,7 +685,7 @@ def place_order_ajax(request):
         action = data.get('action')  # 'BUY' ou 'SELL'
         quantity = int(data.get('quantity', 0))
         take_profit_pct = data.get('take_profit_pct')
-        stop_loss_pct = data.get('stop_loss_pct')
+        stop_loss_price = data.get('stop_loss_price')
         
         # Validations
         if not ticker or not action:
@@ -637,11 +706,11 @@ def place_order_ajax(request):
                 'message': 'Quantité invalide'
             })
         
-        # Convertir None en None pour les pourcentages
+        # Convertir les valeurs
         if take_profit_pct:
             take_profit_pct = float(take_profit_pct)
-        if stop_loss_pct:
-            stop_loss_pct = float(stop_loss_pct)
+        if stop_loss_price:
+            stop_loss_price = float(stop_loss_price)
         
         # Récupérer l'instance du trader
         trader = get_trader()
@@ -652,7 +721,7 @@ def place_order_ajax(request):
             action=action,
             quantity=quantity,
             take_profit_pct=take_profit_pct,
-            stop_loss_pct=stop_loss_pct
+            stop_loss_price=stop_loss_price
         )
         
         return JsonResponse(result)
@@ -661,4 +730,356 @@ def place_order_ajax(request):
         return JsonResponse({
             'success': False,
             'message': f'Erreur serveur: {str(e)}'
+        })
+
+
+def ib_auth_view(request):
+    """
+    Vue pour la page d'authentification Interactive Brokers
+    """
+    return render(request, 'ib_auth.html')
+
+
+def ib_session_status_ajax(request):
+    """
+    API AJAX pour récupérer le statut de la session IB
+    """
+    try:
+        session_manager = get_session_manager()
+        session_info = session_manager.get_session_info()
+        
+        return JsonResponse(session_info)
+        
+    except Exception as e:
+        return JsonResponse({
+            'authenticated': False,
+            'connected': False,
+            'error': str(e)
+        })
+
+
+def ib_logout_ajax(request):
+    """
+    API AJAX pour déconnecter la session IB
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        session_manager = get_session_manager()
+        result = session_manager.logout()
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def ib_mark_session_start_ajax(request):
+    """
+    API AJAX pour marquer le début d'une session (après login manuel)
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Méthode non autorisée'})
+    
+    try:
+        session_manager = get_session_manager()
+        session_manager.mark_session_start()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Session démarrée'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+# =====================================
+# Vues Portefeuille
+# =====================================
+
+def positions_view(request):
+    """
+    Vue pour la page des positions ouvertes
+    """
+    return render(request, 'positions.html')
+
+
+def history_view(request):
+    """
+    Vue pour la page de l'historique des trades
+    """
+    return render(request, 'history.html')
+
+
+def get_ib_accounts_ajax(request):
+    """
+    API AJAX pour récupérer les comptes IB disponibles
+    """
+    try:
+        from .ib_portfolio import get_portfolio_manager
+        
+        portfolio_manager = get_portfolio_manager()
+        result = portfolio_manager.get_accounts()
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'accounts': []
+        })
+
+
+def get_positions_ajax(request):
+    """
+    API AJAX pour récupérer les positions ouvertes
+    """
+    try:
+        from .ib_portfolio import get_portfolio_manager
+        
+        account_id = request.GET.get('account_id')
+        if not account_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'account_id requis'
+            })
+        
+        portfolio_manager = get_portfolio_manager()
+        result = portfolio_manager.get_enriched_positions(account_id)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'positions': []
+        })
+
+
+def get_trade_history_ajax(request):
+    """
+    API AJAX pour récupérer l'historique des trades depuis la BDD
+    """
+    try:
+        from .models import Trade
+        
+        # Récupérer uniquement les trades fermés (avec exit_date)
+        trades = Trade.objects.filter(exit_date__isnull=False).order_by('-exit_date')
+        
+        trades_data = []
+        for trade in trades:
+            trades_data.append({
+                'ticker': trade.ticker,
+                'quantity': trade.quantity,
+                'entry_price': float(trade.entry_price),
+                'exit_price': float(trade.exit_price) if trade.exit_price else None,
+                'sl_price': float(trade.sl_price) if trade.sl_price else None,
+                'tp_price': float(trade.tp_price) if trade.tp_price else None,
+                'pnl_dollar': float(trade.pnl_dollar) if trade.pnl_dollar else None,
+                'pnl_percent': float(trade.pnl_percent) if trade.pnl_percent else None,
+                'risk_reward': float(trade.risk_reward) if trade.risk_reward else None,
+                'exit_type': trade.exit_type,
+                'entry_date': trade.entry_date.isoformat() if trade.entry_date else None,
+                'exit_date': trade.exit_date.isoformat() if trade.exit_date else None,
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'trades': trades_data,
+            'count': len(trades_data)
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'trades': []
+        })
+
+
+# =====================================
+# Vues Profil
+# =====================================
+
+def profile_view(request):
+    """
+    Vue pour la page de profil utilisateur
+    """
+    return render(request, 'profile.html')
+
+
+def get_account_summary_ajax(request):
+    """
+    API AJAX pour récupérer le résumé du compte (capital, etc.)
+    """
+    try:
+        from .ib_portfolio import get_portfolio_manager
+        
+        account_id = request.GET.get('account_id')
+        if not account_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'account_id requis'
+            })
+        
+        portfolio_manager = get_portfolio_manager()
+        result = portfolio_manager.get_account_summary(account_id)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def get_risk_info_ajax(request):
+    """
+    API AJAX pour récupérer les informations de risque actuelles
+    """
+    try:
+        from .risk_manager import get_risk_manager
+        
+        account_id = request.GET.get('account_id')
+        if not account_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'account_id requis'
+            })
+        
+        risk_mgr = get_risk_manager(account_id)
+        risk_info = risk_mgr.get_risk_info()
+        
+        return JsonResponse({
+            'success': True,
+            **risk_info
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def calculate_position_ajax(request):
+    """
+    API AJAX pour calculer la taille de position
+    """
+    try:
+        from .risk_manager import get_risk_manager
+        from .ib_portfolio import get_portfolio_manager
+        
+        account_id = request.GET.get('account_id')
+        entry_price = request.GET.get('entry_price')
+        sl_price = request.GET.get('sl_price')
+        
+        if not all([account_id, entry_price, sl_price]):
+            return JsonResponse({
+                'success': False,
+                'error': 'account_id, entry_price et sl_price requis'
+            })
+        
+        # Récupérer le capital
+        portfolio_manager = get_portfolio_manager()
+        summary = portfolio_manager.get_account_summary(account_id)
+        
+        if not summary.get('success'):
+            return JsonResponse({
+                'success': False,
+                'error': 'Impossible de récupérer le capital'
+            })
+        
+        capital = summary.get('net_liquidation', 0)
+        
+        # Calculer la position
+        risk_mgr = get_risk_manager(account_id)
+        position_info = risk_mgr.calculate_position_size(
+            capital=capital,
+            entry_price=float(entry_price),
+            sl_price=float(sl_price)
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'capital': capital,
+            'level': risk_mgr.get_risk_level_name(),
+            **position_info
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+def update_risk_profile_ajax(request):
+    """
+    API AJAX pour mettre à jour le profil de risque
+    """
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'error': 'Méthode POST requise'
+        })
+    
+    try:
+        from .risk_manager import get_risk_manager
+        from decimal import Decimal
+        
+        data = json.loads(request.body)
+        account_id = data.get('account_id')
+        
+        if not account_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'account_id requis'
+            })
+        
+        risk_mgr = get_risk_manager(account_id)
+        
+        # Mettre à jour base_risk_percent si fourni
+        if 'base_risk_percent' in data:
+            risk_mgr.profile.base_risk_percent = Decimal(str(data['base_risk_percent']))
+        
+        # Mettre à jour les seuils si fournis
+        if 'advance_level_1_min' in data:
+            risk_mgr.profile.advance_level_1_min = data['advance_level_1_min']
+        if 'advance_level_2_min' in data:
+            risk_mgr.profile.advance_level_2_min = data['advance_level_2_min']
+        if 'advance_level_3_min' in data:
+            risk_mgr.profile.advance_level_3_min = data['advance_level_3_min']
+        if 'drawdown_level_1_max' in data:
+            risk_mgr.profile.drawdown_level_1_max = data['drawdown_level_1_max']
+        if 'drawdown_level_2_max' in data:
+            risk_mgr.profile.drawdown_level_2_max = data['drawdown_level_2_max']
+        if 'drawdown_level_3_max' in data:
+            risk_mgr.profile.drawdown_level_3_max = data['drawdown_level_3_max']
+        if 'drawdown_level_4_max' in data:
+            risk_mgr.profile.drawdown_level_4_max = data['drawdown_level_4_max']
+        
+        risk_mgr.profile.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Profil de risque mis à jour',
+            **risk_mgr.get_risk_info()
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
         })

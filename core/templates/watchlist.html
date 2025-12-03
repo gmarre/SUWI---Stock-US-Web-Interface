@@ -136,6 +136,15 @@
                     <a href="/watchlist/" class="btn btn-warning btn-lg active">
                         <i class="bi bi-star-fill"></i> Watchlists
                     </a>
+                    <a href="/positions/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-graph-up"></i> Positions
+                    </a>
+                    <a href="/history/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-clock-history"></i> Historique
+                    </a>
+                    <a href="/profile/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-person-circle"></i> Profil
+                    </a>
                 </div>
                 <button class="btn btn-success btn-lg float-end" onclick="showCreateModal()">
                     <i class="bi bi-plus-circle"></i> Nouvelle Watchlist
@@ -165,9 +174,19 @@
                                     <span class="color-tag" style="background-color: {{ watchlist.color }};"></span>
                                     <h4 class="mb-0">{{ watchlist.name }}</h4>
                                 </div>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteWatchlist({{ watchlist.id }}, '{{ watchlist.name }}')">
-                                    <i class="bi bi-trash"></i> Supprimer
-                                </button>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary me-2 btn-edit-watchlist" 
+                                            data-id="{{ watchlist.id }}" 
+                                            data-name="{{ watchlist.name }}" 
+                                            data-color="{{ watchlist.color }}">
+                                        <i class="bi bi-pencil"></i> Modifier
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger btn-delete-watchlist" 
+                                            data-id="{{ watchlist.id }}" 
+                                            data-name="{{ watchlist.name }}">
+                                        <i class="bi bi-trash"></i> Supprimer
+                                    </button>
+                                </div>
                             </div>
                             
                             <div class="mb-2">
@@ -187,8 +206,10 @@
                                                 <a href="/stock/{{ stock.ticker }}/" class="stock-link">
                                                     <strong>{{ stock.ticker }}</strong>
                                                 </a>
-                                                <i class="bi bi-x-circle delete-icon ms-2" 
-                                                   onclick="removeFromWatchlist({{ watchlist.id }}, '{{ stock.ticker }}', '{{ watchlist.name }}')"
+                                                <i class="bi bi-x-circle delete-icon ms-2 btn-remove-stock" 
+                                                   data-watchlist-id="{{ watchlist.id }}"
+                                                   data-ticker="{{ stock.ticker }}"
+                                                   data-watchlist-name="{{ watchlist.name }}"
                                                    title="Retirer de la watchlist"></i>
                                             </div>
                                         {% endfor %}
@@ -233,7 +254,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Choisir une couleur</label>
-                        <div class="color-picker">
+                        <div class="color-picker" id="createColorPicker">
                             <label class="color-option" title="Rouge">
                                 <input type="radio" name="watchlistColor" value="#FF3B30">
                                 <div class="color-circle" style="background-color: #FF3B30;"></div>
@@ -292,13 +313,124 @@
         </div>
     </div>
 
+    <!-- Modal pour modifier une watchlist -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Modifier la Watchlist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editWatchlistId">
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la watchlist</label>
+                        <input type="text" class="form-control" id="editWatchlistName" placeholder="Ex: Tech Growth, Value Stocks...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Choisir une couleur</label>
+                        <div class="color-picker" id="editColorPicker">
+                            <label class="color-option" title="Rouge">
+                                <input type="radio" name="editWatchlistColor" value="#FF3B30">
+                                <div class="color-circle" style="background-color: #FF3B30;"></div>
+                            </label>
+                            <label class="color-option" title="Orange">
+                                <input type="radio" name="editWatchlistColor" value="#FF9500">
+                                <div class="color-circle" style="background-color: #FF9500;"></div>
+                            </label>
+                            <label class="color-option" title="Jaune">
+                                <input type="radio" name="editWatchlistColor" value="#FFCC00">
+                                <div class="color-circle" style="background-color: #FFCC00;"></div>
+                            </label>
+                            <label class="color-option" title="Vert">
+                                <input type="radio" name="editWatchlistColor" value="#34C759">
+                                <div class="color-circle" style="background-color: #34C759;"></div>
+                            </label>
+                            <label class="color-option" title="Menthe">
+                                <input type="radio" name="editWatchlistColor" value="#00C7BE">
+                                <div class="color-circle" style="background-color: #00C7BE;"></div>
+                            </label>
+                            <label class="color-option" title="Cyan">
+                                <input type="radio" name="editWatchlistColor" value="#32ADE6">
+                                <div class="color-circle" style="background-color: #32ADE6;"></div>
+                            </label>
+                            <label class="color-option" title="Bleu">
+                                <input type="radio" name="editWatchlistColor" value="#007AFF">
+                                <div class="color-circle" style="background-color: #007AFF;"></div>
+                            </label>
+                            <label class="color-option" title="Indigo">
+                                <input type="radio" name="editWatchlistColor" value="#5856D6">
+                                <div class="color-circle" style="background-color: #5856D6;"></div>
+                            </label>
+                            <label class="color-option" title="Violet">
+                                <input type="radio" name="editWatchlistColor" value="#AF52DE">
+                                <div class="color-circle" style="background-color: #AF52DE;"></div>
+                            </label>
+                            <label class="color-option" title="Rose">
+                                <input type="radio" name="editWatchlistColor" value="#FF2D55">
+                                <div class="color-circle" style="background-color: #FF2D55;"></div>
+                            </label>
+                            <label class="color-option" title="Gris">
+                                <input type="radio" name="editWatchlistColor" value="#8E8E93">
+                                <div class="color-circle" style="background-color: #8E8E93;"></div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ajouter des tickers (séparés par des virgules)</label>
+                        <input type="text" class="form-control" id="editAddTickers" placeholder="Ex: AAPL, MSFT, GOOGL">
+                        <small class="text-muted">Entrez les symboles boursiers que vous souhaitez ajouter</small>
+                    </div>
+                    <div id="editAlert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="button" class="btn btn-primary" onclick="updateWatchlist()">
+                        <i class="bi bi-check-circle"></i> Enregistrer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let createModal;
+        let editModal;
 
-        // Initialiser le modal au chargement
+        // Initialiser les modals et event listeners au chargement
         document.addEventListener('DOMContentLoaded', function() {
             createModal = new bootstrap.Modal(document.getElementById('createModal'));
+            editModal = new bootstrap.Modal(document.getElementById('editModal'));
+            
+            // Event listeners pour les boutons modifier
+            document.querySelectorAll('.btn-edit-watchlist').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    const name = this.getAttribute('data-name');
+                    const color = this.getAttribute('data-color');
+                    showEditModal(id, name, color);
+                });
+            });
+            
+            // Event listeners pour les boutons supprimer
+            document.querySelectorAll('.btn-delete-watchlist').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    const name = this.getAttribute('data-name');
+                    deleteWatchlist(id, name);
+                });
+            });
+            
+            // Event listeners pour retirer un stock
+            document.querySelectorAll('.btn-remove-stock').forEach(icon => {
+                icon.addEventListener('click', function() {
+                    const watchlistId = this.getAttribute('data-watchlist-id');
+                    const ticker = this.getAttribute('data-ticker');
+                    const watchlistName = this.getAttribute('data-watchlist-name');
+                    removeFromWatchlist(watchlistId, ticker, watchlistName);
+                });
+            });
         });
 
         // Afficher le modal de création
@@ -309,6 +441,22 @@
             const blueRadio = document.querySelector('input[name="watchlistColor"][value="#007AFF"]');
             if (blueRadio) blueRadio.checked = true;
             createModal.show();
+        }
+
+        // Afficher le modal d'édition
+        function showEditModal(watchlistId, watchlistName, watchlistColor) {
+            document.getElementById('editWatchlistId').value = watchlistId;
+            document.getElementById('editWatchlistName').value = watchlistName;
+            document.getElementById('editAddTickers').value = '';
+            document.getElementById('editAlert').innerHTML = '';
+            
+            // Sélectionner la bonne couleur
+            const colorRadio = document.querySelector(`input[name="editWatchlistColor"][value="${watchlistColor}"]`);
+            if (colorRadio) {
+                colorRadio.checked = true;
+            }
+            
+            editModal.show();
         }
 
         // Créer une nouvelle watchlist
@@ -345,6 +493,76 @@
                 }
             } catch (error) {
                 alertDiv.innerHTML = `<div class="alert alert-danger">Erreur: ${error.message}</div>`;
+            }
+        }
+
+        // Mettre à jour une watchlist
+        async function updateWatchlist() {
+            const watchlistId = document.getElementById('editWatchlistId').value;
+            const name = document.getElementById('editWatchlistName').value.trim();
+            const colorInput = document.querySelector('input[name="editWatchlistColor"]:checked');
+            const color = colorInput ? colorInput.value : '#007AFF';
+            const tickersToAdd = document.getElementById('editAddTickers').value.trim();
+
+            const alertDiv = document.getElementById('editAlert');
+
+            if (!name) {
+                alertDiv.innerHTML = '<div class="alert alert-danger">Veuillez entrer un nom</div>';
+                return;
+            }
+
+            try {
+                // Mettre à jour le nom et la couleur
+                const response = await fetch('/watchlist/update/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: JSON.stringify({ 
+                        watchlist_id: watchlistId,
+                        name: name,
+                        color: color
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    alertDiv.innerHTML = `<div class="alert alert-danger">${data.error || 'Erreur lors de la mise à jour'}</div>`;
+                    return;
+                }
+
+                // Si des tickers doivent être ajoutés
+                if (tickersToAdd) {
+                    const tickers = tickersToAdd.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+                    
+                    for (const ticker of tickers) {
+                        const addResponse = await fetch('/watchlist/add/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken()
+                            },
+                            body: JSON.stringify({
+                                watchlist_id: watchlistId,
+                                ticker: ticker
+                            })
+                        });
+
+                        const addData = await addResponse.json();
+                        if (!addData.success) {
+                            console.warn(`Erreur ajout ${ticker}:`, addData.error);
+                        }
+                    }
+                }
+
+                editModal.hide();
+                location.reload();
+
+            } catch (error) {
+                console.error('Erreur:', error);
+                alertDiv.innerHTML = '<div class="alert alert-danger">Erreur lors de la mise à jour</div>';
             }
         }
 
@@ -419,5 +637,8 @@
             return '';
         }
     </script>
+    
+    <!-- Indicateur de statut IB -->
+    {% include 'ib_status_badge.html' %}
 </body>
 </html>

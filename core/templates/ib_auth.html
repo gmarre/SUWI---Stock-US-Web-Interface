@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion Interactive Brokers - SUWI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+        .status-connected {
+            background-color: #28a745;
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+        .status-disconnected {
+            background-color: #dc3545;
+            box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+        }
+        .status-warning {
+            background-color: #ffc107;
+            box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .auth-iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .instructions {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .countdown {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation -->
+        <div class="row mb-3">
+            <div class="col-12 text-center">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                    <a href="/ib-auth/" class="btn btn-warning btn-lg active">
+                        <i class="bi bi-shield-lock"></i> Connexion IB
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Titre -->
+        <div class="text-center text-white mb-4">
+            <h1 class="display-4">🔐 Connexion Interactive Brokers</h1>
+            <p class="lead">Authentifiez-vous pour activer le trading</p>
+        </div>
+
+        <!-- Statut de connexion -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h4 class="mb-4">
+                    <i class="bi bi-activity"></i> Statut de la session
+                </h4>
+                
+                <div id="connectionStatus" class="mb-4">
+                    <div class="d-flex align-items-center">
+                        <span class="status-indicator status-disconnected" id="statusDot"></span>
+                        <div>
+                            <strong id="statusText">Vérification en cours...</strong>
+                            <p class="text-muted mb-0" id="statusDetails">Veuillez patienter...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="sessionInfo" class="alert alert-info d-none">
+                    <h6><i class="bi bi-info-circle"></i> Informations de session</h6>
+                    <p class="mb-1"><strong>Démarrée:</strong> <span id="sessionStart">-</span></p>
+                    <p class="mb-1"><strong>Expire dans:</strong> <span id="expiryTime" class="countdown">-</span></p>
+                    <p class="mb-0"><strong>Dernier tickle:</strong> <span id="lastTickle">-</span></p>
+                </div>
+
+                <div id="errorAlert" class="alert alert-danger d-none"></div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <div class="instructions">
+                    <h5><i class="bi bi-lightbulb"></i> Instructions</h5>
+                    <ol>
+                        <li>Assurez-vous que <strong>IB Gateway</strong> est lancé sur votre machine</li>
+                        <li><strong class="text-danger">IMPORTANT:</strong> Acceptez le certificat SSL en premier (voir ci-dessous) ⬇️</li>
+                        <li>Entrez vos identifiants <strong>Paper Trading</strong> ou <strong>Live</strong></li>
+                        <li>Complétez l'authentification 2FA si demandée</li>
+                        <li>Attendez le message "Client login succeeds"</li>
+                        <li>La session restera active pendant 24 heures</li>
+                    </ol>
+                    
+                    <div class="alert alert-danger mt-3">
+                        <h6><i class="bi bi-shield-exclamation"></i> <strong>Erreur "Connexion non privée" ?</strong></h6>
+                        <p class="mb-2">Le Gateway IB utilise un certificat SSL auto-signé. C'est normal et sécurisé.</p>
+                        <p class="mb-2"><strong>Solution dans Chrome/Edge :</strong></p>
+                        <ol class="mb-2">
+                            <li>Cliquez sur <strong>"Paramètres avancés"</strong></li>
+                            <li>Puis <strong>"Continuer vers localhost (dangereux)"</strong></li>
+                            <li><em>OU</em> tapez directement : <code class="bg-dark text-white px-2 py-1">thisisunsafe</code> sur la page d'erreur</li>
+                        </ol>
+                        <p class="mb-0"><strong>Solution dans Firefox :</strong> Cliquez sur "Avancé" → "Accepter le risque et continuer"</p>
+                    </div>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <strong>Important:</strong> Ne fermez pas cette fenêtre pendant l'authentification.
+                    </div>
+                </div>
+
+                <!-- Iframe de connexion IB -->
+                <div id="iframeContainer" class="d-none">
+                    <h5 class="mb-3">Connexion Interactive Brokers Gateway</h5>
+                    <iframe id="ibAuthFrame" class="auth-iframe" src="https://localhost:5000"></iframe>
+                </div>
+
+                <!-- Boutons d'action -->
+                <div class="text-center mt-4">
+                    <a href="https://localhost:5000" target="_blank" class="btn btn-warning btn-lg me-2">
+                        <i class="bi bi-shield-check"></i> 1. Accepter le certificat SSL
+                    </a>
+                    <button class="btn btn-primary btn-lg me-2" onclick="showAuthFrame()">
+                        <i class="bi bi-box-arrow-in-right"></i> 2. Ouvrir la connexion IB
+                    </button>
+                    <button class="btn btn-success btn-lg me-2" onclick="checkStatus()">
+                        <i class="bi bi-arrow-clockwise"></i> Vérifier le statut
+                    </button>
+                    <button class="btn btn-danger btn-lg" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i> Déconnexion
+                    </button>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Cliquez d'abord sur le bouton jaune pour accepter le certificat, puis sur le bouton bleu pour vous connecter
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aide -->
+        <div class="main-card">
+            <div class="card-body p-4">
+                <h5><i class="bi bi-question-circle"></i> Besoin d'aide ?</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>❌ Erreur de connexion ?</h6>
+                        <ul>
+                            <li>Vérifiez que IB Gateway est lancé</li>
+                            <li>Port par défaut: <code>5000</code></li>
+                            <li>Acceptez le certificat SSL dans votre navigateur</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>⏰ Session expirée ?</h6>
+                        <ul>
+                            <li>Les sessions durent 24 heures</li>
+                            <li>Un keepalive automatique est actif</li>
+                            <li>Reconnectez-vous si nécessaire</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Polling pour vérifier le statut toutes les 5 secondes
+        let statusInterval = null;
+        let notificationShown = false;
+
+        function showAuthFrame() {
+            document.getElementById('iframeContainer').classList.remove('d-none');
+            // Démarrer le polling après avoir ouvert l'iframe
+            startStatusPolling();
+        }
+
+        function startStatusPolling() {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+            }
+            
+            // Vérifier immédiatement
+            checkStatus();
+            
+            // Puis toutes les 5 secondes
+            statusInterval = setInterval(checkStatus, 5000);
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/ib-session-status/');
+                const data = await response.json();
+                
+                updateStatusUI(data);
+                
+                // Notification si expire bientôt
+                if (data.expires_soon && !notificationShown) {
+                    showExpiryNotification(data.time_until_expiry_seconds);
+                    notificationShown = true;
+                }
+                
+                // Réinitialiser la notification si session renouvelée
+                if (!data.expires_soon) {
+                    notificationShown = false;
+                }
+                
+            } catch (error) {
+                console.error('Erreur lors de la vérification du statut:', error);
+                updateStatusUI({
+                    authenticated: false,
+                    connected: false,
+                    error: 'Impossible de contacter le serveur'
+                });
+            }
+        }
+
+        function updateStatusUI(data) {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const statusDetails = document.getElementById('statusDetails');
+            const sessionInfo = document.getElementById('sessionInfo');
+            const errorAlert = document.getElementById('errorAlert');
+            
+            if (data.authenticated && data.connected) {
+                // Connecté
+                statusDot.className = 'status-indicator status-connected';
+                statusText.textContent = 'Connecté et authentifié ✓';
+                statusDetails.textContent = 'Votre session IB est active';
+                sessionInfo.classList.remove('d-none');
+                errorAlert.classList.add('d-none');
+                
+                // Mettre à jour les infos de session
+                if (data.session_start) {
+                    document.getElementById('sessionStart').textContent = 
+                        new Date(data.session_start).toLocaleString('fr-FR');
+                }
+                
+                if (data.time_until_expiry_seconds) {
+                    const hours = Math.floor(data.time_until_expiry_seconds / 3600);
+                    const minutes = Math.floor((data.time_until_expiry_seconds % 3600) / 60);
+                    document.getElementById('expiryTime').textContent = 
+                        `${hours}h ${minutes}min`;
+                    
+                    // Changer la couleur si expire bientôt
+                    if (data.expires_soon) {
+                        statusDot.className = 'status-indicator status-warning';
+                        document.getElementById('expiryTime').style.color = '#ffc107';
+                    }
+                }
+                
+                if (data.last_tickle) {
+                    document.getElementById('lastTickle').textContent = 
+                        new Date(data.last_tickle).toLocaleTimeString('fr-FR');
+                }
+                
+            } else {
+                // Déconnecté
+                statusDot.className = 'status-indicator status-disconnected';
+                statusText.textContent = 'Non connecté';
+                statusDetails.textContent = 'Veuillez vous authentifier';
+                sessionInfo.classList.add('d-none');
+                
+                if (data.error) {
+                    errorAlert.textContent = `Erreur: ${data.error}`;
+                    errorAlert.classList.remove('d-none');
+                }
+            }
+        }
+
+        function showExpiryNotification(secondsLeft) {
+            const minutes = Math.floor(secondsLeft / 60);
+            
+            // Notification navigateur
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("Session IB expire bientôt", {
+                    body: `Votre session expire dans ${minutes} minutes. Reconnectez-vous pour continuer.`,
+                    icon: '/static/ib-icon.png'
+                });
+            }
+            
+            // Alert visuelle
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-warning alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Attention!</strong> Votre session IB expire dans ${minutes} minutes.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
+            
+            // Supprimer après 10 secondes
+            setTimeout(() => alertDiv.remove(), 10000);
+        }
+
+        async function logout() {
+            if (!confirm('Êtes-vous sûr de vouloir vous déconnecter de Interactive Brokers ?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/ib-logout/', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Déconnexion réussie');
+                    checkStatus();
+                } else {
+                    alert(`Erreur: ${data.error}`);
+                }
+            } catch (error) {
+                alert('Erreur lors de la déconnexion');
+            }
+        }
+
+        // Demander la permission pour les notifications
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+
+        // Démarrer le polling au chargement
+        window.addEventListener('load', () => {
+            startStatusPolling();
+        });
+
+        // Arrêter le polling quand on quitte la page
+        window.addEventListener('beforeunload', () => {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+            }
+        });
+    </script>
+</body>
+</html>

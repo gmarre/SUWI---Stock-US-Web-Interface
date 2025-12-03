@@ -97,7 +97,7 @@
     <div class="container-fluid">
         <!-- Navigation -->
         <div class="row mb-3">
-            <div class="col-md-6">
+            <div class="col-md-8">
                 <div class="btn-group" role="group">
                     <a href="/" class="btn btn-outline-light btn-lg">
                         <i class="bi bi-house"></i> Accueil
@@ -108,9 +108,18 @@
                     <a href="/watchlist/" class="btn btn-outline-light btn-lg">
                         <i class="bi bi-star-fill"></i> Watchlists
                     </a>
+                    <a href="/positions/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-graph-up"></i> Positions
+                    </a>
+                    <a href="/history/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-clock-history"></i> Historique
+                    </a>
+                    <a href="/profile/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-person-circle"></i> Profil
+                    </a>
                 </div>
             </div>
-            <div class="col-md-6 text-end">
+            <div class="col-md-4 text-end">
                 <button class="btn btn-success btn-lg" onclick="showWatchlistModal()">
                     <i class="bi bi-plus-circle"></i> Ajouter à Watchlist
                 </button>
@@ -632,6 +641,21 @@
         // Initialiser le modal au chargement
         document.addEventListener('DOMContentLoaded', function() {
             watchlistModal = new bootstrap.Modal(document.getElementById('watchlistModal'));
+            
+            // Nettoyer le backdrop lors de la fermeture du modal de trading
+            const tradingModalEl = document.getElementById('tradingModal');
+            if (tradingModalEl) {
+                tradingModalEl.addEventListener('hidden.bs.modal', function () {
+                    // Supprimer tous les backdrops restants
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    
+                    // Nettoyer le body
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                });
+            }
         });
 
         // Afficher le modal et charger les watchlists
@@ -781,14 +805,17 @@
             }
         }
 
-        function showTradingModal(action) {
+        async function showTradingModal(action) {
             const actionText = action === 'BUY' ? 'Achat' : 'Vente';
             const btnClass = action === 'BUY' ? 'success' : 'danger';
             const icon = action === 'BUY' ? 'arrow-up-circle' : 'arrow-down-circle';
             
+            // Charger les données de risque
+            let riskData = await loadRiskData();
+            
             const modalHTML = `
                 <div class="modal fade" id="tradingModal" tabindex="-1">
-                    <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-dialog modal-dialog-centered modal-lg">
                         <div class="modal-content">
                             <div class="modal-header bg-${btnClass} text-white">
                                 <h5 class="modal-title">
@@ -799,42 +826,124 @@
                             <div class="modal-body">
                                 <div id="tradingAlert"></div>
                                 
+                                <!-- Info Capital et Risque -->
+                                <div class="alert alert-info mb-3">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <strong>Capital total:</strong> 
+                                            <span id="displayCapital" class="float-end">$${riskData.capital.toFixed(2)}</span>
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Niveau de risque:</strong>
+                                            <span id="displayRiskLevel" class="float-end badge bg-${riskData.level_badge}">${riskData.level_name}</span>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-6">
+                                            <strong>Compteur:</strong>
+                                            <span id="displayCounter" class="float-end">${riskData.counter > 0 ? '+' : ''}${riskData.counter}</span>
+                                        </div>
+                                        <div class="col-6">
+                                            <strong>Risque autorisé:</strong>
+                                            <span id="displayRiskAmount" class="float-end text-danger fw-bold">$${riskData.risk_amount.toFixed(2)} (${riskData.risk_percent}%)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Prix actuel</label>
-                                    <input type="text" class="form-control" value="$${currentPrice.toFixed(2)}" readonly>
+                                    <input type="text" class="form-control" id="currentPriceInput" value="$${currentPrice.toFixed(2)}" readonly>
                                 </div>
                                 
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Quantité</label>
-                                    <input type="number" class="form-control" id="tradeQuantity" min="1" value="1" 
-                                           onchange="updateTotalValue()">
-                                    <small class="text-muted">Nombre d'actions</small>
-                                </div>
-                                
-                                <div class="mb-3">
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-danger">
+                        <i class="bi bi-shield-exclamation"></i> Stop Loss ($) *Requis*
+                    </label>
+                    <input type="number" class="form-control form-control-lg border-danger" 
+                           id="stopLossPrice" min="0.01" step="0.01" placeholder="Ex: 3.30" required>
+                    <small class="text-muted">Le prix SL détermine la taille de votre position selon votre gestion du risque</small>
+                    <div id="slDistanceDisplay" class="mt-1 text-danger"></div>
+                    <button type="button" class="btn btn-primary w-100 mt-2" onclick="calculatePositionSize()">
+                        <i class="bi bi-calculator"></i> Calculer la taille de position
+                    </button>
+                </div>                                <div class="mb-3">
                                     <label class="form-label fw-bold">Take Profit (%) <span class="text-muted">(Optionnel)</span></label>
-                                    <input type="number" class="form-control" id="takeProfitPct" min="0" step="0.1" placeholder="Ex: 5">
+                                    <input type="number" class="form-control" id="takeProfitPct" min="0" step="0.1" placeholder="Ex: 5" oninput="updateTPDisplay()">
                                     <small class="text-muted">Vente automatique si gain de X%</small>
+                                    <div id="tpPriceDisplay" class="mt-1 text-success"></div>
                                 </div>
                                 
+                                <!-- Message d'erreur calcul -->
+                                <div class="alert alert-warning mb-3" id="calcErrorCard" style="display:none;">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <span id="calcErrorMessage"></span>
+                                </div>
+                                
+                                <!-- Calcul automatique de la quantité -->
+                                <div class="card bg-light border-primary mb-3" id="autoCalcCard" style="display:none;">
+                                    <div class="card-body">
+                                        <h6 class="card-title text-primary">
+                                            <i class="bi bi-calculator-fill"></i> Calcul automatique de position
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-6">
+                                                <strong>Quantité recommandée:</strong>
+                                            </div>
+                                            <div class="col-6 text-end">
+                                                <span id="recommendedQty" class="text-primary fw-bold fs-4">-</span> actions
+                                            </div>
+                                        </div>
+                                        <div class="row mt-2">
+                                            <div class="col-6">
+                                                <strong>Montant investi:</strong>
+                                            </div>
+                                            <div class="col-6 text-end">
+                                                <span id="investedAmount">$0.00</span>
+                                            </div>
+                                        </div>
+                                        <div class="row mt-1">
+                                            <div class="col-6">
+                                                <strong>Risque si SL touché:</strong>
+                                            </div>
+                                            <div class="col-6 text-end">
+                                                <span id="riskIfSL" class="text-danger fw-bold">$0.00</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Mode manuel (avancé) -->
                                 <div class="mb-3">
-                                    <label class="form-label fw-bold">Stop Loss (%) <span class="text-muted">(Optionnel)</span></label>
-                                    <input type="number" class="form-control" id="stopLossPct" min="0" step="0.1" placeholder="Ex: 2">
-                                    <small class="text-muted">Vente automatique si perte de X%</small>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="manualMode" onchange="toggleManualMode()">
+                                        <label class="form-check-label text-warning" for="manualMode">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> Mode manuel (Ignorer la gestion du risque)
+                                        </label>
+                                    </div>
                                 </div>
                                 
-                                <div class="alert alert-info">
-                                    <strong><i class="bi bi-calculator"></i> Montant total:</strong>
-                                    <span id="totalValue" class="float-end fw-bold">$${currentPrice.toFixed(2)}</span>
+                                <div class="mb-3" id="manualQtyDiv" style="display:none;">
+                                    <label class="form-label fw-bold">Quantité manuelle</label>
+                                    <input type="number" class="form-control" id="tradeQuantity" min="1" value="1" 
+                                           oninput="updateManualTotal()">
+                                    <div id="manualWarning" class="alert alert-danger mt-2" style="display:none;">
+                                        <i class="bi bi-exclamation-triangle"></i> 
+                                        <strong>Attention !</strong> Cette quantité dépasse votre gestion du risque.
+                                        <div class="mt-2">
+                                            <strong>Risque si SL touché:</strong> <span id="manualRiskAmount" class="fw-bold"></span>
+                                            <br>
+                                            <strong>Dépassement:</strong> <span id="excessRisk" class="text-danger fw-bold"></span>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div class="alert alert-warning">
-                                    <i class="bi bi-exclamation-triangle"></i> Limite maximale: <strong>$5,000</strong>
+                                    <i class="bi bi-exclamation-triangle"></i> Limite maximale par ordre: <strong>$5,000</strong>
                                 </div>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                                <button type="button" class="btn btn-${btnClass}" onclick="confirmOrder()">
+                                <button type="button" class="btn btn-${btnClass}" id="confirmOrderBtn" onclick="confirmOrder()" disabled>
                                     <i class="bi bi-${icon}"></i> Confirmer ${actionText}
                                 </button>
                             </div>
@@ -855,28 +964,219 @@
             modal.show();
         }
 
-        function updateTotalValue() {
-            const quantity = parseInt(document.getElementById('tradeQuantity').value) || 1;
-            const total = currentPrice * quantity;
-            document.getElementById('totalValue').textContent = `$${total.toFixed(2)}`;
-            
-            // Vérifier la limite
-            if (total > 5000) {
-                document.getElementById('totalValue').parentElement.classList.remove('alert-info');
-                document.getElementById('totalValue').parentElement.classList.add('alert-danger');
-            } else {
-                document.getElementById('totalValue').parentElement.classList.remove('alert-danger');
-                document.getElementById('totalValue').parentElement.classList.add('alert-info');
+        async function loadRiskData() {
+            try {
+                // Récupérer d'abord le compte IB
+                const accountsResponse = await fetch('/get-ib-accounts/');
+                const accountsData = await accountsResponse.json();
+                
+                if (!accountsData.success || !accountsData.accounts || accountsData.accounts.length === 0) {
+                    console.error('Pas de compte IB disponible');
+                    return getDefaultRiskData();
+                }
+                
+                const accountId = typeof accountsData.accounts[0] === 'string' 
+                    ? accountsData.accounts[0] 
+                    : (accountsData.accounts[0].accountId || accountsData.accounts[0].id);
+                
+                // Récupérer le capital réel depuis IB
+                const summaryResponse = await fetch(`/get-account-summary/?account_id=${encodeURIComponent(accountId)}`);
+                const summaryData = await summaryResponse.json();
+                
+                if (summaryData.success) {
+                    const capital = summaryData.net_liquidation || 10000;
+                    
+                    // Calculer le risque (pour l'instant, utiliser 1% par défaut)
+                    // TODO: charger depuis RiskProfile quand implémenté
+                    const riskPercent = 1.0;
+                    const riskAmount = capital * (riskPercent / 100);
+                    
+                    return {
+                        capital: capital,
+                        counter: 0,  // TODO: charger depuis RiskProfile
+                        level_name: 'STANDARD',
+                        level_badge: 'primary',
+                        risk_percent: riskPercent,
+                        risk_amount: riskAmount
+                    };
+                } else {
+                    return getDefaultRiskData();
+                }
+            } catch (error) {
+                console.error('Erreur chargement risque:', error);
+                return getDefaultRiskData();
             }
         }
 
+        function getDefaultRiskData() {
+            return {
+                capital: 10000,
+                counter: 0,
+                level_name: 'STANDARD',
+                level_badge: 'primary',
+                risk_percent: 1.0,
+                risk_amount: 100
+            };
+        }
+
+        async function calculatePositionSize() {
+            const slPrice = parseFloat(document.getElementById('stopLossPrice').value);
+            
+            // Cacher les cartes précédentes
+            document.getElementById('autoCalcCard').style.display = 'none';
+            document.getElementById('calcErrorCard').style.display = 'none';
+            document.getElementById('confirmOrderBtn').disabled = true;
+            
+            if (!slPrice || slPrice <= 0) {
+                document.getElementById('calcErrorMessage').textContent = 'Veuillez entrer un prix de Stop Loss valide.';
+                document.getElementById('calcErrorCard').style.display = 'block';
+                return;
+            }
+            
+            // Vérifier que le SL est inférieur au prix actuel pour un achat
+            if (currentTradingAction === 'BUY' && slPrice >= currentPrice) {
+                document.getElementById('calcErrorMessage').textContent = 'Le Stop Loss doit être inférieur au prix actuel pour un achat.';
+                document.getElementById('calcErrorCard').style.display = 'block';
+                return;
+            }
+            
+            // Calculer la distance en %
+            const slDistance = Math.abs((currentPrice - slPrice) / currentPrice * 100);
+            
+            document.getElementById('slDistanceDisplay').innerHTML = 
+                `<i class="bi bi-arrow-down"></i> Distance: <strong>${slDistance.toFixed(2)}%</strong> ($${Math.abs(currentPrice - slPrice).toFixed(2)} par action)`;
+            
+            // Charger les données de risque
+            const riskData = await loadRiskData();
+            
+            // Calculer la taille de position (risque par action)
+            const riskPerShare = Math.abs(currentPrice - slPrice);
+            
+            if (riskPerShare <= 0) {
+                document.getElementById('calcErrorMessage').textContent = 'Distance du Stop Loss invalide.';
+                document.getElementById('calcErrorCard').style.display = 'block';
+                return;
+            }
+            
+            const quantity = Math.floor(riskData.risk_amount / riskPerShare);
+            
+            if (quantity <= 0) {
+                document.getElementById('calcErrorMessage').textContent = 'La taille de position ne peut pas être calculée car avec ce stop loss aucune taille de position ne garantit une perte inférieure à la gestion de risque autorisée.';
+                document.getElementById('calcErrorCard').style.display = 'block';
+                return;
+            }
+            
+            let finalQuantity = quantity;
+            const totalCost = quantity * currentPrice;
+            const actualRisk = quantity * riskPerShare;
+            
+            // Vérifier la limite de $5000
+            if (totalCost > 5000) {
+                finalQuantity = Math.floor(5000 / currentPrice);
+                const newTotalCost = finalQuantity * currentPrice;
+                const newRisk = finalQuantity * riskPerShare;
+                
+                document.getElementById('recommendedQty').textContent = finalQuantity;
+                document.getElementById('investedAmount').textContent = `$${newTotalCost.toFixed(2)}`;
+                document.getElementById('riskIfSL').textContent = `$${newRisk.toFixed(2)}`;
+            } else {
+                document.getElementById('recommendedQty').textContent = finalQuantity;
+                document.getElementById('investedAmount').textContent = `$${totalCost.toFixed(2)}`;
+                document.getElementById('riskIfSL').textContent = `$${actualRisk.toFixed(2)}`;
+            }
+            
+            document.getElementById('autoCalcCard').style.display = 'block';
+            document.getElementById('confirmOrderBtn').disabled = false;
+            
+            // Stocker pour utilisation lors de la confirmation
+            window.calculatedQuantity = finalQuantity;
+            
+            // Stocker pour utilisation lors de la confirmation
+            window.calculatedQuantity = quantity;
+            window.currentRiskData = riskData;
+        }
+
+        function updateTPDisplay() {
+            const tpPct = parseFloat(document.getElementById('takeProfitPct').value);
+            
+            if (tpPct && tpPct > 0) {
+                const tpPrice = currentPrice * (1 + tpPct / 100);
+                document.getElementById('tpPriceDisplay').innerHTML = 
+                    `<i class="bi bi-arrow-up"></i> Prix TP: <strong>$${tpPrice.toFixed(2)}</strong>`;
+            } else {
+                document.getElementById('tpPriceDisplay').innerHTML = '';
+            }
+        }
+
+        function toggleManualMode() {
+            const manual = document.getElementById('manualMode').checked;
+            document.getElementById('manualQtyDiv').style.display = manual ? 'block' : 'none';
+            document.getElementById('autoCalcCard').style.display = manual ? 'none' : 'block';
+            
+            if (manual) {
+                document.getElementById('confirmOrderBtn').disabled = false;
+                updateManualTotal();
+            } else {
+                calculatePositionSize();
+            }
+        }
+
+        async function updateManualTotal() {
+            const quantity = parseInt(document.getElementById('tradeQuantity').value) || 1;
+            const slPct = parseFloat(document.getElementById('stopLossPct').value);
+            
+            if (!slPct || slPct <= 0) {
+                document.getElementById('manualWarning').style.display = 'none';
+                return;
+            }
+            
+            const slPrice = currentPrice * (1 - slPct / 100);
+            const riskPerShare = currentPrice - slPrice;
+            const manualRisk = riskPerShare * quantity;
+            
+            // Charger le risque autorisé
+            const riskData = await loadRiskData();
+            const allowedRisk = riskData.risk_amount;
+            
+            document.getElementById('manualRiskAmount').textContent = `$${manualRisk.toFixed(2)}`;
+            
+            if (manualRisk > allowedRisk) {
+                const excess = manualRisk - allowedRisk;
+                const excessPct = (excess / allowedRisk) * 100;
+                document.getElementById('excessRisk').textContent = `+$${excess.toFixed(2)} (+${excessPct.toFixed(1)}%)`;
+                document.getElementById('manualWarning').style.display = 'block';
+            } else {
+                document.getElementById('manualWarning').style.display = 'none';
+            }
+        }
+
+        function updateTotalValue() {
+            // Fonction conservée pour compatibilité
+            updateManualTotal();
+        }
+
         function confirmOrder() {
-            const quantity = parseInt(document.getElementById('tradeQuantity').value) || 0;
+            const isManualMode = document.getElementById('manualMode').checked;
             const takeProfitPct = parseFloat(document.getElementById('takeProfitPct').value) || 0;
-            const stopLossPct = parseFloat(document.getElementById('stopLossPct').value) || 0;
+            const stopLossPrice = parseFloat(document.getElementById('stopLossPrice').value) || 0;
+            
+            let quantity = 0;
+            
+            // Déterminer la quantité selon le mode
+            if (isManualMode) {
+                quantity = parseInt(document.getElementById('tradeQuantity').value) || 0;
+            } else {
+                quantity = window.calculatedQuantity || 0;
+            }
+            
             const total = currentPrice * quantity;
             
             // Validations
+            if (!stopLossPrice || stopLossPrice <= 0) {
+                showTradingAlert('Le Stop Loss est requis', 'danger');
+                return;
+            }
+            
             if (quantity <= 0) {
                 showTradingAlert('Veuillez entrer une quantité valide', 'danger');
                 return;
@@ -887,9 +1187,33 @@
                 return;
             }
             
+            // Si mode manuel, vérifier le dépassement et demander confirmation supplémentaire
+            if (isManualMode && window.currentRiskData) {
+                const riskPerShare = Math.abs(currentPrice - stopLossPrice);
+                const manualRisk = riskPerShare * quantity;
+                
+                if (manualRisk > window.currentRiskData.risk_amount) {
+                    const excessRisk = manualRisk - window.currentRiskData.risk_amount;
+                    const excessPct = (excessRisk / window.currentRiskData.risk_amount * 100).toFixed(1);
+                    
+                    const overrideWarning = `⚠️ ATTENTION - DÉPASSEMENT DE RISQUE ⚠️\n\n` +
+                        `Risque autorisé: $${window.currentRiskData.risk_amount.toFixed(2)}\n` +
+                        `Votre risque: $${manualRisk.toFixed(2)}\n` +
+                        `Dépassement: +$${excessRisk.toFixed(2)} (+${excessPct}%)\n\n` +
+                        `Êtes-vous VRAIMENT sûr de vouloir ignorer votre gestion du risque ?`;
+                    
+                    if (!confirm(overrideWarning)) {
+                        return;
+                    }
+                }
+            }
+            
             // Première confirmation
             const actionText = currentTradingAction === 'BUY' ? 'acheter' : 'vendre';
-            const confirmMsg = `Êtes-vous sûr de vouloir ${actionText} ${quantity} action(s) de {{ ticker }} pour $${total.toFixed(2)} ?`;
+            const mode = isManualMode ? 'MANUEL' : 'AUTO';
+            const confirmMsg = `Mode: ${mode}\n\n` +
+                `Êtes-vous sûr de vouloir ${actionText} ${quantity} action(s) de {{ ticker }} pour $${total.toFixed(2)} ?\n\n` +
+                `Stop Loss: $${stopLossPrice.toFixed(2)}${takeProfitPct > 0 ? '\nTake Profit: ' + takeProfitPct + '%' : ''}`;
             
             if (!confirm(confirmMsg)) {
                 return;
@@ -903,10 +1227,10 @@
             }
             
             // Envoyer l'ordre
-            placeOrder(quantity, takeProfitPct, stopLossPct);
+            placeOrder(quantity, takeProfitPct, stopLossPrice);
         }
 
-        async function placeOrder(quantity, takeProfitPct, stopLossPct) {
+        async function placeOrder(quantity, takeProfitPct, stopLossPrice) {
             const alertDiv = document.getElementById('tradingAlert');
             alertDiv.innerHTML = `
                 <div class="alert alert-info">
@@ -927,7 +1251,7 @@
                         action: currentTradingAction,
                         quantity: quantity,
                         take_profit_pct: takeProfitPct || null,
-                        stop_loss_pct: stopLossPct || null
+                        stop_loss_price: stopLossPrice || null
                     })
                 });
                 
@@ -935,30 +1259,61 @@
                 
                 if (data.success) {
                     alertDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="bi bi-check-circle"></i> ${data.message}
+                        <div class="alert alert-success alert-dismissible fade show border-success" style="border-width: 3px;">
+                            <h4 class="alert-heading">
+                                <i class="bi bi-check-circle-fill"></i> ✅ ORDRE PLACÉ AVEC SUCCÈS
+                            </h4>
                             <hr>
-                            <small>
-                                <strong>Détails:</strong><br>
-                                Ordre #${data.order_id}<br>
-                                ${quantity} actions @ $${data.details.price.toFixed(2)}<br>
-                                Total: $${data.details.total_value.toFixed(2)}
-                                ${data.details.take_profit ? '<br>Take Profit: ' + data.details.take_profit : ''}
-                                ${data.details.stop_loss ? '<br>Stop Loss: ' + data.details.stop_loss : ''}
-                            </small>
+                            <p class="mb-2"><strong>📋 Numéro d'ordre:</strong> #${data.order_id}</p>
+                            <p class="mb-2"><strong>📊 Quantité:</strong> ${quantity} actions</p>
+                            <p class="mb-2"><strong>💰 Prix:</strong> $${data.details.price.toFixed(2)}</p>
+                            <p class="mb-2"><strong>💵 Montant total:</strong> $${data.details.total_value.toFixed(2)}</p>
+                            ${data.details.take_profit ? '<p class="mb-2"><strong>🎯 Take Profit:</strong> ' + data.details.take_profit + '</p>' : ''}
+                            ${data.details.stop_loss ? '<p class="mb-0"><strong>🛡️ Stop Loss:</strong> ' + data.details.stop_loss + '</p>' : ''}
+                            <hr>
+                            <p class="mb-0"><small><i class="bi bi-info-circle"></i> Cette fenêtre se fermera automatiquement dans 5 secondes</small></p>
                         </div>
                     `;
                     
-                    // Fermer le modal après 3 secondes
+                    // Fermer le modal après 5 secondes
                     setTimeout(() => {
-                        bootstrap.Modal.getInstance(document.getElementById('tradingModal')).hide();
-                    }, 3000);
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('tradingModal'));
+                        if (modal) {
+                            modal.hide();
+                            // Supprimer le backdrop et nettoyer le body
+                            setTimeout(() => {
+                                const backdrop = document.querySelector('.modal-backdrop');
+                                if (backdrop) {
+                                    backdrop.remove();
+                                }
+                                document.body.classList.remove('modal-open');
+                                document.body.style.overflow = '';
+                                document.body.style.paddingRight = '';
+                            }, 300);
+                        }
+                    }, 5000);
                 } else {
-                    showTradingAlert(data.message || 'Erreur lors du placement de l\'ordre', 'danger');
+                    alertDiv.innerHTML = `
+                        <div class="alert alert-danger alert-dismissible fade show border-danger" style="border-width: 3px;">
+                            <h4 class="alert-heading">
+                                <i class="bi bi-x-circle-fill"></i> ❌ ERREUR - ORDRE NON PLACÉ
+                            </h4>
+                            <hr>
+                            <p class="mb-0"><strong>Message d'erreur:</strong><br>${data.message || 'Erreur inconnue lors du placement de l\'ordre'}</p>
+                        </div>
+                    `;
                 }
                 
             } catch (error) {
-                showTradingAlert('Erreur de connexion: ' + error.message, 'danger');
+                alertDiv.innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show border-danger" style="border-width: 3px;">
+                        <h4 class="alert-heading">
+                            <i class="bi bi-exclamation-triangle-fill"></i> ⚠️ ERREUR DE CONNEXION
+                        </h4>
+                        <hr>
+                        <p class="mb-0"><strong>Message d'erreur:</strong><br>${error.message}</p>
+                    </div>
+                `;
             }
         }
 
@@ -967,5 +1322,8 @@
             alertDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
         }
     </script>
+    
+    <!-- Indicateur de statut IB -->
+    {% include 'ib_status_badge.html' %}
 </body>
 </html>

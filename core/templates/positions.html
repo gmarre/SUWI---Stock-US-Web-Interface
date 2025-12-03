@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positions - SUWI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        
+        .positive-pnl {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .negative-pnl {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .neutral-pnl {
+            color: #6c757d;
+        }
+        
+        .position-row:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .refresh-btn {
+            animation: none;
+        }
+        
+        .refresh-btn.spinning {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-card">
+            <div class="card-header bg-primary text-white p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h3 class="mb-0">
+                            <i class="bi bi-graph-up"></i> Positions Ouvertes
+                        </h3>
+                        <small class="opacity-75">Portefeuille en temps réel</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-light btn-sm refresh-btn" onclick="loadPositions()">
+                            <i class="bi bi-arrow-clockwise"></i> Actualiser
+                        </button>
+                        <a href="/profile/" class="btn btn-light btn-sm ms-2">
+                            <i class="bi bi-person-circle"></i> Profil
+                        </a>
+                        <a href="/" class="btn btn-light btn-sm ms-2">
+                            <i class="bi bi-house"></i> Accueil
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body p-4">
+                <!-- Zone de statut -->
+                <div id="statusMessage" class="alert d-none"></div>
+                
+                <!-- Tableau des positions -->
+                <div id="positionsContainer">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-3 text-muted">Chargement des positions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'ib_status_badge.html' %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentAccountId = null;
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.className = `alert alert-${type}`;
+            statusDiv.textContent = message;
+            statusDiv.classList.remove('d-none');
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.classList.add('d-none');
+                }, 3000);
+            }
+        }
+
+        function formatPrice(price) {
+            if (price === null || price === undefined) return '-';
+            return '$' + parseFloat(price).toFixed(2);
+        }
+
+        function formatPercent(percent) {
+            if (percent === null || percent === undefined) return '-';
+            return parseFloat(percent).toFixed(2) + '%';
+        }
+
+        function formatPnL(value, isPercent = false) {
+            if (value === null || value === undefined) return '-';
+            
+            const num = parseFloat(value);
+            const formatted = isPercent ? formatPercent(num) : formatPrice(num);
+            
+            if (num > 0) {
+                return `<span class="positive-pnl">+${formatted}</span>`;
+            } else if (num < 0) {
+                return `<span class="negative-pnl">${formatted}</span>`;
+            } else {
+                return `<span class="neutral-pnl">${formatted}</span>`;
+            }
+        }
+
+        async function getAccounts() {
+            try {
+                const response = await fetch('/get-ib-accounts/');
+                const data = await response.json();
+                
+                console.log('Comptes reçus:', data);
+                
+                if (data.success && data.accounts && data.accounts.length > 0) {
+                    // S'assurer qu'on extrait bien la string du compte
+                    const account = data.accounts[0];
+                    // Si c'est un objet avec une propriété accountId, l'extraire
+                    currentAccountId = typeof account === 'string' ? account : (account.accountId || account.id || JSON.stringify(account));
+                    console.log('Account ID sélectionné:', currentAccountId);
+                    return currentAccountId;
+                } else {
+                    throw new Error(data.error || 'Aucun compte disponible');
+                }
+            } catch (error) {
+                console.error('Erreur récupération compte:', error);
+                throw error;
+            }
+        }
+
+        async function loadPositions() {
+            const container = document.getElementById('positionsContainer');
+            const refreshBtn = document.querySelector('.refresh-btn');
+            
+            try {
+                refreshBtn.querySelector('i').classList.add('spinning');
+                
+                // Récupérer le compte si nécessaire
+                if (!currentAccountId) {
+                    await getAccounts();
+                }
+                
+                console.log('Chargement positions pour compte:', currentAccountId);
+                
+                // Récupérer les positions
+                const response = await fetch(`/get-positions/?account_id=${encodeURIComponent(currentAccountId)}`);
+                const data = await response.json();
+                
+                console.log('Réponse positions:', data);
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur lors du chargement');
+                }
+                
+                const positions = data.positions || [];
+                
+                if (positions.length === 0) {
+                    // État vide
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="bi bi-inbox"></i>
+                            <h5>Aucune position ouverte</h5>
+                            <p class="text-muted">Vos positions apparaîtront ici une fois que vous aurez passé des ordres.</p>
+                        </div>
+                    `;
+                } else {
+                    // Générer le tableau
+                    let html = `
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th class="text-end">Quantité</th>
+                                        <th class="text-end">Prix d'entrée</th>
+                                        <th class="text-end">Prix actuel</th>
+                                        <th class="text-end">Stop Loss</th>
+                                        <th class="text-end">Take Profit</th>
+                                        <th class="text-end">P&L ($)</th>
+                                        <th class="text-end">P&L (%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    positions.forEach(pos => {
+                        html += `
+                            <tr class="position-row">
+                                <td>
+                                    <strong>${pos.ticker}</strong>
+                                    <small class="text-muted d-block">${pos.position_type}</small>
+                                </td>
+                                <td class="text-end">${pos.quantity}</td>
+                                <td class="text-end">${formatPrice(pos.avg_price)}</td>
+                                <td class="text-end">${formatPrice(pos.current_price)}</td>
+                                <td class="text-end">${pos.stop_loss ? formatPrice(pos.stop_loss) : '-'}</td>
+                                <td class="text-end">${pos.take_profit ? formatPrice(pos.take_profit) : '-'}</td>
+                                <td class="text-end">${formatPnL(pos.unrealized_pnl, false)}</td>
+                                <td class="text-end">${formatPnL(pos.pnl_percent, true)}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    
+                    container.innerHTML = html;
+                    showStatus(`${positions.length} position(s) chargée(s)`, 'success');
+                }
+                
+            } catch (error) {
+                console.error('Erreur chargement positions:', error);
+                
+                let errorMessage = error.message;
+                let errorHint = '';
+                
+                // Détecter les erreurs d'authentification
+                if (error.message.includes('401') || error.message.includes('Status code 401')) {
+                    errorMessage = 'Non authentifié avec Interactive Brokers';
+                    errorHint = `
+                        <p class="text-warning mt-2">
+                            <i class="bi bi-info-circle"></i> 
+                            Veuillez vous connecter à IB Gateway via la 
+                            <a href="/ib-auth/" class="text-warning"><u>page d'authentification</u></a>
+                        </p>
+                    `;
+                }
+                
+                showStatus('Erreur: ' + errorMessage, 'danger');
+                
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <h5>Erreur de chargement</h5>
+                        <p class="text-muted">${errorMessage}</p>
+                        ${errorHint}
+                        <button class="btn btn-primary mt-3" onclick="loadPositions()">
+                            <i class="bi bi-arrow-clockwise"></i> Réessayer
+                        </button>
+                    </div>
+                `;
+            } finally {
+                refreshBtn.querySelector('i').classList.remove('spinning');
+            }
+        }
+
+        // Charger les positions au démarrage
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPositions();
+            
+            // Actualisation auto toutes les 30 secondes
+            setInterval(loadPositions, 30000);
+        });
+    </script>
+</body>
+</html>

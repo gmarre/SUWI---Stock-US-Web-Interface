@@ -95,6 +95,15 @@
                     <a href="/watchlist/" class="btn btn-outline-light btn-lg">
                         <i class="bi bi-star-fill"></i> Watchlists
                     </a>
+                    <a href="/positions/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-graph-up"></i> Positions
+                    </a>
+                    <a href="/history/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-clock-history"></i> Historique
+                    </a>
+                    <a href="/profile/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-person-circle"></i> Profil
+                    </a>
                 </div>
             </div>
         </div>
@@ -579,5 +588,8 @@
             startWatchlistTagsUpdate();
         }
     </script>
+    
+    <!-- Indicateur de statut IB -->
+    {% include 'ib_status_badge.html' %}
 </body>
 </html>

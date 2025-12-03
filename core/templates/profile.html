@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil - SUWI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        
+        .info-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+        
+        .capital-display {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 20px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-weight: 500;
+            opacity: 0.9;
+        }
+        
+        .info-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .account-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+        
+        .refresh-btn {
+            animation: none;
+        }
+        
+        .refresh-btn.spinning {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            border-radius: 8px;
+            height: 30px;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation -->
+        <div class="row mb-3">
+            <div class="col-12 text-center">
+                <div class="btn-group" role="group">
+                    <a href="/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-house"></i> Accueil
+                    </a>
+                    <a href="/screener/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-filter"></i> Screener
+                    </a>
+                    <a href="/watchlist/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-star-fill"></i> Watchlists
+                    </a>
+                    <a href="/positions/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-graph-up"></i> Positions
+                    </a>
+                    <a href="/history/" class="btn btn-outline-light btn-lg">
+                        <i class="bi bi-clock-history"></i> Historique
+                    </a>
+                    <a href="/profile/" class="btn btn-warning btn-lg active">
+                        <i class="bi bi-person-circle"></i> Profil
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Titre -->
+        <div class="text-center text-white mb-4">
+            <h1 class="display-4"><i class="bi bi-person-circle"></i> Mon Profil</h1>
+            <p class="lead">Informations de compte et gestion du capital</p>
+        </div>
+
+        <!-- Carte d'informations du compte -->
+        <div class="row">
+            <div class="col-lg-8 offset-lg-2">
+                <div class="info-card" id="accountCard">
+                    <div class="text-center">
+                        <div class="spinner-border text-white" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-3">Chargement des informations du compte...</p>
+                    </div>
+                </div>
+
+                <!-- Carte de gestion du risque -->
+                <div class="main-card" id="riskCard">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">
+                                <i class="bi bi-shield-check"></i> Gestion du Risque Dynamique
+                            </h4>
+                            <button class="btn btn-sm btn-primary refresh-btn" onclick="loadRiskInfo()">
+                                <i class="bi bi-arrow-clockwise"></i> Actualiser
+                            </button>
+                        </div>
+                        
+                        <!-- Statut actuel -->
+                        <div class="alert alert-success" id="riskStatus">
+                            <div class="row">
+                                <div class="col-md-4 text-center border-end">
+                                    <div class="fw-bold">Niveau Actuel</div>
+                                    <h3 class="mb-0" id="currentLevel">-</h3>
+                                </div>
+                                <div class="col-md-4 text-center border-end">
+                                    <div class="fw-bold">Compteur</div>
+                                    <h3 class="mb-0" id="currentCounter">0</h3>
+                                </div>
+                                <div class="col-md-4 text-center">
+                                    <div class="fw-bold">Risque Effectif</div>
+                                    <h3 class="mb-0" id="currentRisk">1.0%</h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration du risque de base -->
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">
+                                        <i class="bi bi-percent"></i> Risque Initial (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="baseRiskInput" 
+                                           placeholder="1.0" step="0.1" min="0.1" max="5">
+                                    <small class="text-muted">
+                                        Pourcentage de base en mode STANDARD (recommandé: 1%)
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">
+                                        <i class="bi bi-calculator"></i> Calcul Dynamique
+                                    </label>
+                                    <div class="alert alert-light mb-0">
+                                        <small>
+                                            <strong>AVANCE:</strong> x2, x4, x8<br>
+                                            <strong>DRAWDOWN:</strong> ÷2, ÷4, ÷8, ÷16
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration des seuils -->
+                        <div class="mt-4">
+                            <h5 class="mb-3">
+                                <i class="bi bi-sliders"></i> Seuils de Niveaux
+                            </h5>
+                            
+                            <!-- Niveaux AVANCE -->
+                            <div class="mb-3">
+                                <label class="form-label text-success fw-bold">Niveaux AVANCE (gains)</label>
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <input type="number" class="form-control" id="advanceLevel1" placeholder="7">
+                                        <small class="text-muted">AVANCE 1 (min: x2)</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="number" class="form-control" id="advanceLevel2" placeholder="14">
+                                        <small class="text-muted">AVANCE 2 (min: x4)</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="number" class="form-control" id="advanceLevel3" placeholder="21">
+                                        <small class="text-muted">AVANCE 3 (min: x8)</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Niveaux DRAWDOWN -->
+                            <div class="mb-3">
+                                <label class="form-label text-danger fw-bold">Niveaux DRAWDOWN (pertes)</label>
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <input type="number" class="form-control" id="drawdownLevel1" placeholder="-5">
+                                        <small class="text-muted">DD -1 (max: ÷2)</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" class="form-control" id="drawdownLevel2" placeholder="-10">
+                                        <small class="text-muted">DD -2 (max: ÷4)</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" class="form-control" id="drawdownLevel3" placeholder="-15">
+                                        <small class="text-muted">DD -3 (max: ÷8)</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="number" class="form-control" id="drawdownLevel4" placeholder="-20">
+                                        <small class="text-muted">DD -4 (max: ÷16)</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Boutons d'action -->
+                        <div class="mt-4 d-flex gap-2">
+                            <button class="btn btn-primary" onclick="saveRiskProfile()">
+                                <i class="bi bi-save"></i> Enregistrer la Configuration
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="resetToDefaults()">
+                                <i class="bi bi-arrow-counterclockwise"></i> Réinitialiser
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% include 'ib_status_badge.html' %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentAccountId = null;
+
+        function formatCurrency(value) {
+            if (value === null || value === undefined) return '$0.00';
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(value);
+        }
+
+        function showError(message) {
+            const card = document.getElementById('accountCard');
+            card.innerHTML = `
+                <div class="text-center">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+                    <h4 class="mt-3">Erreur de chargement</h4>
+                    <p>${message}</p>
+                    ${message.includes('401') || message.includes('authentifié') ? `
+                        <a href="/ib-auth/" class="btn btn-light mt-3">
+                            <i class="bi bi-key"></i> Se connecter à IB Gateway
+                        </a>
+                    ` : `
+                        <button class="btn btn-light mt-3" onclick="loadAccountInfo()">
+                            <i class="bi bi-arrow-clockwise"></i> Réessayer
+                        </button>
+                    `}
+                </div>
+            `;
+        }
+
+        function displayAccountInfo(accountId, data) {
+            const card = document.getElementById('accountCard');
+            
+            const netLiquidation = data.net_liquidation || 0;
+            const totalCash = data.total_cash || 0;
+            const buyingPower = data.buying_power || 0;
+            const equity = data.equity_with_loan || 0;
+            
+            card.innerHTML = `
+                <div class="text-center">
+                    <div class="account-badge">
+                        <i class="bi bi-bank"></i> Compte IB: ${accountId}
+                    </div>
+                    
+                    <h2>Capital Total</h2>
+                    <div class="capital-display">${formatCurrency(netLiquidation)}</div>
+                    
+                    <div class="mt-4">
+                        <div class="info-row">
+                            <span class="info-label">
+                                <i class="bi bi-cash-stack"></i> Liquidités disponibles
+                            </span>
+                            <span class="info-value">${formatCurrency(totalCash)}</span>
+                        </div>
+                        
+                        <div class="info-row">
+                            <span class="info-label">
+                                <i class="bi bi-wallet2"></i> Pouvoir d'achat
+                            </span>
+                            <span class="info-value">${formatCurrency(buyingPower)}</span>
+                        </div>
+                        
+                        <div class="info-row">
+                            <span class="info-label">
+                                <i class="bi bi-piggy-bank"></i> Capitaux propres
+                            </span>
+                            <span class="info-value">${formatCurrency(equity)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <small class="opacity-75">
+                            <i class="bi bi-clock"></i> Mis à jour à l'instant
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function getAccounts() {
+            try {
+                const response = await fetch('/get-ib-accounts/');
+                const data = await response.json();
+                
+                if (data.success && data.accounts && data.accounts.length > 0) {
+                    currentAccountId = typeof data.accounts[0] === 'string' 
+                        ? data.accounts[0] 
+                        : (data.accounts[0].accountId || data.accounts[0].id);
+                    return currentAccountId;
+                } else {
+                    throw new Error(data.error || 'Aucun compte disponible');
+                }
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function loadAccountInfo() {
+            const refreshBtn = document.querySelector('.refresh-btn');
+            
+            try {
+                refreshBtn.querySelector('i').classList.add('spinning');
+                
+                // Récupérer le compte si nécessaire
+                if (!currentAccountId) {
+                    await getAccounts();
+                }
+                
+                // Récupérer les informations du compte
+                const response = await fetch(`/get-account-summary/?account_id=${encodeURIComponent(currentAccountId)}`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur lors du chargement');
+                }
+                
+                displayAccountInfo(currentAccountId, data);
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                showError(error.message);
+            } finally {
+                refreshBtn.querySelector('i').classList.remove('spinning');
+            }
+        }
+
+        async function loadRiskInfo() {
+            if (!currentAccountId) {
+                await getAccounts();
+            }
+
+            try {
+                const response = await fetch(`/get-risk-info/?account_id=${encodeURIComponent(currentAccountId)}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur lors du chargement du risque');
+                }
+
+                // Afficher le statut actuel
+                document.getElementById('currentLevel').textContent = data.level;
+                document.getElementById('currentCounter').textContent = data.counter;
+                document.getElementById('currentRisk').textContent = `${data.risk_percent.toFixed(2)}%`;
+
+                // Remplir les champs
+                document.getElementById('baseRiskInput').value = data.base_risk_percent;
+                document.getElementById('advanceLevel1').value = data.thresholds.advance_1;
+                document.getElementById('advanceLevel2').value = data.thresholds.advance_2;
+                document.getElementById('advanceLevel3').value = data.thresholds.advance_3;
+                document.getElementById('drawdownLevel1').value = data.thresholds.drawdown_1;
+                document.getElementById('drawdownLevel2').value = data.thresholds.drawdown_2;
+                document.getElementById('drawdownLevel3').value = data.thresholds.drawdown_3;
+                document.getElementById('drawdownLevel4').value = data.thresholds.drawdown_4;
+
+                // Colorier le statut en fonction du niveau
+                const statusDiv = document.getElementById('riskStatus');
+                if (data.level.includes('AVANCE')) {
+                    statusDiv.className = 'alert alert-success';
+                } else if (data.level.includes('DRAWDOWN')) {
+                    statusDiv.className = 'alert alert-danger';
+                } else {
+                    statusDiv.className = 'alert alert-info';
+                }
+
+            } catch (error) {
+                console.error('Erreur chargement risque:', error);
+                alert('Erreur: ' + error.message);
+            }
+        }
+
+        async function saveRiskProfile() {
+            if (!currentAccountId) {
+                alert('Aucun compte sélectionné');
+                return;
+            }
+
+            const profileData = {
+                account_id: currentAccountId,
+                base_risk_percent: parseFloat(document.getElementById('baseRiskInput').value),
+                advance_level_1_min: parseInt(document.getElementById('advanceLevel1').value),
+                advance_level_2_min: parseInt(document.getElementById('advanceLevel2').value),
+                advance_level_3_min: parseInt(document.getElementById('advanceLevel3').value),
+                drawdown_level_1_max: parseInt(document.getElementById('drawdownLevel1').value),
+                drawdown_level_2_max: parseInt(document.getElementById('drawdownLevel2').value),
+                drawdown_level_3_max: parseInt(document.getElementById('drawdownLevel3').value),
+                drawdown_level_4_max: parseInt(document.getElementById('drawdownLevel4').value)
+            };
+
+            try {
+                const response = await fetch('/update-risk-profile/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify(profileData)
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Erreur lors de la sauvegarde');
+                }
+
+                alert('✅ Configuration du risque enregistrée avec succès !');
+                await loadRiskInfo(); // Recharger pour afficher les nouvelles valeurs
+
+            } catch (error) {
+                console.error('Erreur sauvegarde:', error);
+                alert('❌ Erreur: ' + error.message);
+            }
+        }
+
+        function resetToDefaults() {
+            document.getElementById('baseRiskInput').value = '1.0';
+            document.getElementById('advanceLevel1').value = '7';
+            document.getElementById('advanceLevel2').value = '14';
+            document.getElementById('advanceLevel3').value = '21';
+            document.getElementById('drawdownLevel1').value = '-5';
+            document.getElementById('drawdownLevel2').value = '-10';
+            document.getElementById('drawdownLevel3').value = '-15';
+            document.getElementById('drawdownLevel4').value = '-20';
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Charger les infos au démarrage
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAccountInfo();
+            loadRiskInfo();
+        });
+    </script>
+</body>
+</html>
